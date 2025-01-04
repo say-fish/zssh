@@ -81,8 +81,8 @@ pub const public = struct {
 
     pub const Ecdsa = struct {
         magic: Magic,
-        nonce: []const u8,
         curve: []const u8,
+        pk: []const u8,
 
         const Self = @This();
 
@@ -402,8 +402,8 @@ pub const private = struct {
         checksum: u64,
         kind: []const u8,
         // Public parts
-        nonce: []const u8,
         curve: []const u8,
+        pk: []const u8,
         // Private parts
         sk: []const u8,
         comment: []const u8,

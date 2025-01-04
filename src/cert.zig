@@ -386,16 +386,16 @@ pub const Rsa = Certificate(struct {
 });
 
 pub const Ecdsa = Certificate(struct {
-    nonce: []const u8,
     curve: []const u8,
+    pk: []const u8,
 
     const Self = @This();
 
     pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const nn, const nonce = try proto.rfc4251.parse_string(src);
-        const nc, const curve = try proto.rfc4251.parse_string(src[nn..]);
+        const next, const curve = try proto.rfc4251.parse_string(src);
+        const last, const pk = try proto.rfc4251.parse_string(src[next..]);
 
-        return .{ nn + nc, .{ .nonce = nonce, .curve = curve } };
+        return .{ next + last, .{ .curve = curve, .pk = pk } };
     }
 });
 
