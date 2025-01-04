@@ -19,10 +19,10 @@ pub fn main() !void {
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
-        _ = try sshcrypto.cert.RSA.from_bytes(pem.data.der);
+        _ = try sshcrypto.cert.Rsa.from_bytes(pem.data.der);
     }
 
     const elapsed = timer.read();
 
-    std.debug.print("`RSA.from_bytes` took ~= {}ns\n", .{elapsed / MAX_RUNS});
+    std.debug.print("`Rsa.from_bytes` took ~= {}ns\n", .{elapsed / MAX_RUNS});
 }

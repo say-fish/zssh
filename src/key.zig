@@ -124,9 +124,9 @@ pub const public = struct {
 pub const private = struct {
     pub fn Managed(comptime T: type) type {
         return struct {
+            data: T,
             allocator: std.mem.Allocator,
             ref: []u8,
-            data: T,
 
             const Self = @This();
 

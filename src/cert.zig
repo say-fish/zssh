@@ -1,8 +1,9 @@
 //! SSH certificate parsing and verification.
 //!
-//! Support for parsing DER and PEM enconded SSH certificates. PEM decoding can be done in
-//! place or not. All parsing is done in place, with zero allocations, for this,
-//! the certificate data (DER) **MUST** outlive the parsed certificate.
+//! Support for parsing DER and PEM enconded SSH certificates. PEM decoding can
+//! be done in place or not. All parsing is done in place, with zero
+//! allocations, for this, the certificate data (DER) **MUST** outlive the
+//! parsed certificate.
 
 const std = @import("std");
 const proto = @import("proto.zig");
@@ -33,11 +34,11 @@ fn GenericIteratorImpl(comptime T: type, parse_value: anytype) type {
             return parse_value(self.ref, &self.off, ret);
         }
 
-        pub fn reset(self: *Self) void {
+        pub inline fn reset(self: *Self) void {
             self.off = 0;
         }
 
-        pub fn done(self: *const Self) bool {
+        pub inline fn done(self: *const Self) bool {
             return self.off == self.ref.len;
         }
     };
@@ -305,105 +306,10 @@ const Principals = struct {
     );
 };
 
-pub const Rsa = struct {
-    magic: Magic,
-    nonce: []const u8,
-    e: []const u8, // TODO: mpint
-    n: []const u8, // TODO: mpint
-    serial: u64,
-    kind: CertType,
-    key_id: []const u8,
-    valid_principals: Principals,
-    valid_after: u64,
-    valid_before: u64,
-    critical_options: CriticalOptions,
-    extensions: Extensions,
-    reserved: []const u8,
-    signature_key: []const u8,
-    signature: []const u8,
-
-    const Self = @This();
-
-    fn from(src: []const u8) Error!Rsa {
-        return try proto.parse(Self, src);
-    }
-
-    pub inline fn from_pem(pem: *const Pem) Error!Rsa {
-        return try Self.from(pem.der);
-    }
-
-    pub inline fn from_bytes(src: []const u8) Error!Rsa {
-        return try Self.from(src);
-    }
-};
-
-pub const Ecdsa = struct {
-    magic: Magic,
-    nonce: []const u8,
-    curve: []const u8,
-    public_key: []const u8,
-    serial: u64,
-    kind: CertType,
-    key_id: []const u8,
-    valid_principals: Principals,
-    valid_after: u64,
-    valid_before: u64,
-    critical_options: CriticalOptions,
-    extensions: Extensions,
-    reserved: []const u8,
-    signature_key: []const u8,
-    signature: []const u8,
-
-    const Self = @This();
-
-    fn from(src: []const u8) Error!Ecdsa {
-        return try proto.parse(Self, src);
-    }
-
-    pub inline fn from_pem(pem: *const Pem) Error!Ecdsa {
-        return try Self.from(pem.der);
-    }
-
-    pub inline fn from_bytes(src: []const u8) Error!Ecdsa {
-        return try Self.from(src);
-    }
-};
-
-pub const Ec25519 = struct {
-    magic: Magic,
-    nonce: []const u8,
-    pk: []const u8,
-    serial: u64,
-    kind: CertType,
-    key_id: []const u8,
-    valid_principals: Principals,
-    valid_after: u64,
-    valid_before: u64,
-    critical_options: CriticalOptions,
-    extensions: Extensions,
-    reserved: []const u8,
-    signature_key: []const u8,
-    signature: []const u8,
-
-    const Self = @This();
-
-    fn from(src: []const u8) Error!Ec25519 {
-        return try proto.parse(Self, src);
-    }
-
-    pub inline fn from_pem(pem: *const Pem) Error!Ec25519 {
-        return try Self.from(pem.der);
-    }
-
-    pub inline fn from_bytes(src: []const u8) Error!Ec25519 {
-        return try Self.from(src);
-    }
-};
-
 pub const Cert = union(enum) {
     rsa: Rsa,
     ecdsa: Ecdsa,
-    ed25519: Ec25519,
+    ed25519: Ed25519,
 
     const Self = @This();
 
@@ -424,9 +330,83 @@ pub const Cert = union(enum) {
             => .{ .ecdsa = try Ecdsa.from_pem(pem) },
 
             .ssh_ed25519,
-            => .{ .ed25519 = try Ec25519.from_pem(pem) },
+            => .{ .ed25519 = try Ed25519.from_pem(pem) },
 
             else => @panic("DSA certificates are not supported"),
         };
     }
 };
+
+fn Certificate(comptime T: type) type {
+    // TODO: assert T is a struct
+    return struct {
+        magic: Magic,
+        nonce: []const u8,
+        public_key: T,
+        serial: u64,
+        kind: CertType,
+        key_id: []const u8,
+        valid_principals: Principals,
+        valid_after: u64,
+        valid_before: u64,
+        critical_options: CriticalOptions,
+        extensions: Extensions,
+        reserved: []const u8,
+        signature_key: []const u8,
+        signature: []const u8,
+
+        const Self = @This();
+
+        fn from(src: []const u8) Error!Self {
+            return try proto.parse(Self, src);
+        }
+
+        pub inline fn from_pem(pem: *const Pem) Error!Self {
+            return try Self.from(pem.der);
+        }
+
+        pub inline fn from_bytes(src: []const u8) Error!Self {
+            return try Self.from(src);
+        }
+    };
+}
+
+pub const Rsa = Certificate(struct {
+    e: []const u8,
+    n: []const u8,
+
+    const Self = @This();
+
+    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+        const ne, const e = try proto.rfc4251.parse_string(src);
+        const nn, const n = try proto.rfc4251.parse_string(src[ne..]);
+
+        return .{ ne + nn, .{ .e = e, .n = n } };
+    }
+});
+
+pub const Ecdsa = Certificate(struct {
+    nonce: []const u8,
+    curve: []const u8,
+
+    const Self = @This();
+
+    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+        const nn, const nonce = try proto.rfc4251.parse_string(src);
+        const nc, const curve = try proto.rfc4251.parse_string(src[nn..]);
+
+        return .{ nn + nc, .{ .nonce = nonce, .curve = curve } };
+    }
+});
+
+pub const Ed25519 = Certificate(struct {
+    pk: []const u8,
+
+    const Self = @This();
+
+    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+        const next, const pk = try proto.rfc4251.parse_string(src);
+
+        return .{ next, .{ .pk = pk } };
+    }
+});
