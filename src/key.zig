@@ -39,6 +39,14 @@ pub const public = struct {
             return proto.Error.InvalidData;
         }
 
+        pub fn from_string(str: []const u8) Error!Magic {
+            for (Self.strings, 0..) |s, i|
+                if (std.mem.eql(u8, s, str))
+                    return @enumFromInt(i);
+
+            return Error.InvalidMagicString;
+        }
+
         pub fn from_bytes(src: []const u8) Error!Magic {
             _, const magic = Self.parse(src) catch return Error.InvalidMagicString;
 
@@ -117,6 +125,40 @@ pub const public = struct {
         pub inline fn from_pem(pem: Pem) Error!Ed25519 {
             // XXX: Check if PEM magic matches what we got from the DER
             return try Self.from(pem.der);
+        }
+    };
+
+    pub const Pk = union(enum) {
+        rsa: Rsa,
+        ecdsa: Ecdsa,
+        ed25519: Ed25519,
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) proto.Error!proto.Cont(Pk) {
+            const next, const pk = try proto.rfc4251.parse_string(src);
+
+            return .{
+                next,
+                Self.from_bytes(pk) catch return Error.InvalidData,
+            };
+        }
+
+        pub fn from_bytes(src: []const u8) !Self {
+            _, const magic = try proto.rfc4251.parse_string(src);
+
+            return switch (try Magic.from_string(magic)) {
+                .ssh_rsa,
+                => .{ .rsa = try Rsa.from_bytes(src) },
+
+                .ecdsa_sha2_nistp256,
+                .ecdsa_sha2_nistp384,
+                .ecdsa_sha2_nistp521,
+                => .{ .ecdsa = try Ecdsa.from_bytes(src) },
+
+                .ssh_ed25519,
+                => .{ .ed25519 = try Ed25519.from_bytes(src) },
+            };
         }
     };
 };

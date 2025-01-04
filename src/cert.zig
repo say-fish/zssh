@@ -7,6 +7,7 @@
 
 const std = @import("std");
 const proto = @import("proto.zig");
+const keys = @import("key.zig");
 
 pub const Error = error{
     /// This indicates, either, PEM corruption, or certificate corruption.
@@ -352,7 +353,7 @@ fn Certificate(comptime T: type) type {
         critical_options: CriticalOptions,
         extensions: Extensions,
         reserved: []const u8,
-        signature_key: []const u8,
+        signature_key: keys.public.Pk,
         signature: []const u8,
 
         const Self = @This();
@@ -378,10 +379,10 @@ pub const Rsa = Certificate(struct {
     const Self = @This();
 
     pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const ne, const e = try proto.rfc4251.parse_string(src);
-        const nn, const n = try proto.rfc4251.parse_string(src[ne..]);
+        const next, const e = try proto.rfc4251.parse_string(src);
+        const last, const n = try proto.rfc4251.parse_string(src[next..]);
 
-        return .{ ne + nn, .{ .e = e, .n = n } };
+        return .{ next + last, .{ .e = e, .n = n } };
     }
 });
 

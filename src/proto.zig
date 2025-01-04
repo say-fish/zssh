@@ -43,31 +43,30 @@ pub fn Cont(comptime T: type) type {
 }
 
 pub const rfc4251 = struct {
-    pub inline fn read_int(comptime T: type, buf: []const u8) ?T {
-        if (buf.len < @sizeOf(T))
-            return null;
+    pub inline fn read_int(comptime T: type, buf: []const u8) Error!T {
+        if (buf.len < @sizeOf(T)) {
+            @branchHint(.unlikely);
 
-        return std.mem.readInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
+            return Error.InvalidData;
+        }
+
+        return std.mem.readVarInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
     }
 
     pub inline fn parse_int(comptime T: type, buf: []const u8) Error!struct { usize, T } {
-        if (read_int(T, buf)) |n|
-            return .{ @sizeOf(T), n };
-
-        return Error.MalformedInteger;
+        return .{ @sizeOf(T), try read_int(T, buf) };
     }
 
     pub inline fn parse_string(buf: []const u8) Error!struct { usize, []const u8 } {
-        if (read_int(u32, buf)) |len| {
-            const size = len + @sizeOf(u32);
+        const size = @sizeOf(u32) + try read_int(u32, buf);
 
-            if (size > buf.len)
-                return Error.MalformedString;
+        if (size > buf.len) {
+            @branchHint(.unlikely);
 
-            return .{ size, buf[@sizeOf(u32)..size] };
+            return Error.MalformedString;
         }
 
-        return Error.MalformedString;
+        return .{ size, buf[@sizeOf(u32)..size] };
     }
 };
 

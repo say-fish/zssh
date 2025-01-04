@@ -2,7 +2,7 @@ const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
 
-const MAX_RUNS: usize = 0x01 << 22;
+const MAX_RUNS: usize = 0x01 << 26;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -24,5 +24,9 @@ pub fn main() !void {
 
     const elapsed = timer.read();
 
-    std.debug.print("`Rsa.from_bytes` took ~= {}ns\n", .{elapsed / MAX_RUNS});
+    std.debug.print("Parsed Rsa SSH cert, {} times\n", .{MAX_RUNS});
+    std.debug.print(
+        "`Rsa.from_bytes` took ~= {}ns ({} certs/s)\n",
+        .{ elapsed / MAX_RUNS, 1000000000 / (elapsed / MAX_RUNS) },
+    );
 }

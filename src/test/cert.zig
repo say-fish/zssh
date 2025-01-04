@@ -15,6 +15,9 @@ test "parse rsa cert" {
 
     switch (try sshcrypto.cert.Cert.from_pem(&pem.data)) {
         .rsa => |cert| {
+            std.debug.print("{any}\n", .{cert.signature_key});
+            std.debug.print("{s}\n", .{cert.signature});
+
             try expect_equal(cert.magic, sshcrypto.cert.Magic.ssh_rsa);
             try expect_equal(cert.serial, 2);
             try expect_equal(cert.kind, sshcrypto.cert.CertType.user);
