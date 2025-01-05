@@ -8,6 +8,7 @@
 const std = @import("std");
 const proto = @import("proto.zig");
 const keys = @import("key.zig");
+const sig = @import("sig.zig");
 
 pub const Error = error{
     /// This indicates, either, PEM corruption, or certificate corruption.
@@ -354,7 +355,7 @@ fn Certificate(comptime T: type) type {
         extensions: Extensions,
         reserved: []const u8,
         signature_key: keys.public.Pk,
-        signature: []const u8,
+        signature: sig.Sig,
 
         const Self = @This();
 

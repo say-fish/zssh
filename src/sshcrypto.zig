@@ -4,6 +4,7 @@ const std = @import("std");
 
 pub const cert = @import("cert.zig");
 pub const key = @import("key.zig");
+pub const sig = @import("sig.zig");
 
 // TODO: Map errors
 pub const Error = error{

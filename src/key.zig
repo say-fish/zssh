@@ -193,7 +193,7 @@ pub const private = struct {
         pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Magic) {
             const next, const magic = try proto.read_null_terminated(src);
 
-            for (Self.strings, 0..) |s, i|
+            inline for (comptime Self.strings, 0..) |s, i|
                 if (std.mem.eql(u8, s, magic))
                     return .{ next, @enumFromInt(i) };
 
