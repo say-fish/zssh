@@ -90,6 +90,21 @@ test "parse ed25519 cert" {
     }
 }
 
+test "verify ed25519 cert" {
+    var pem = try cert_decoder.decode(@embedFile("ed25519-cert.pub"));
+    defer pem.deinit();
+
+    switch (try sshcrypto.cert.Cert.from_pem(&pem.data)) {
+        .ed25519 => |cert| {
+            const signature = std.crypto.sign.Ed25519.Signature.fromBytes(cert.signature.ed25519.sm[0..64].*);
+            const pk = try std.crypto.sign.Ed25519.PublicKey.fromBytes(cert.signature_key.ed25519.pk[0..32].*);
+
+            try signature.verify(pem.data.der[0 .. pem.data.der.len - 87], pk);
+        },
+        else => return error.wrong_certificate,
+    }
+}
+
 test "extensions iterator" {
     // Reference
     const extensions = [_][]const u8{
