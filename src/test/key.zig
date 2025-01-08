@@ -56,7 +56,7 @@ test "Rsa private key: get_private_key" {
     // TODO: Check other fields
 }
 
-test "rsa private key with passphrase" {
+test "Rsa private key with passphrase" {
     const pem = try key_decoder.decode(@embedFile("rsa-key-123"));
     defer pem.deinit();
 
@@ -70,6 +70,16 @@ test "rsa private key with passphrase" {
     try std.testing.expectEqualSlices(u8, private_key.data.kind, "ssh-rsa");
     try std.testing.expectEqualSlices(u8, private_key.data.comment, "root@locahost"); // FIXME: Fix typo
     // TODO: Check other fields
+}
+
+test "Rsa private key with wrong passphrase" {
+    const pem = try key_decoder.decode(@embedFile("rsa-key-123"));
+    defer pem.deinit();
+
+    const key = try sshcrypto.key.private.Rsa.from_pem(pem.data);
+
+    // FIXME:
+    try std.testing.expectError(error.MalformedString, key.get_private_key(std.testing.allocator, "wrong"));
 }
 
 test "Ed25519 private key: get_private_key" {

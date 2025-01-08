@@ -320,9 +320,6 @@ pub const private = struct {
                 allocator: std.mem.Allocator,
                 passphrase: ?[]const u8,
             ) !Managed(Pri) {
-                if (!@hasDecl(Pri, "from_bytes"))
-                    @compileError("Type `Pri` does not declare `from_bytes([]const u8)`");
-
                 if (self.is_encrypted() and passphrase == null)
                     return error.MissingPassphrase;
 
@@ -334,11 +331,19 @@ pub const private = struct {
                             &self.kdf,
                             passphrase orelse undefined,
                         );
+                        errdefer allocator.free(private_blob);
+
+                        const sk = try proto.parse(Pri, private_blob);
+
+                        // TODO: Move this to hits own field since likelihood
+                        // of it failing after parsing is probably 0
+                        if (!private.check_checksum(sk.checksum))
+                            return error.InvalidChecksum;
 
                         return .{
                             .allocator = allocator,
                             .ref = private_blob,
-                            .data = try Pri.from_bytes(private_blob),
+                            .data = sk,
                         };
                     }
                 }
@@ -373,20 +378,6 @@ pub const private = struct {
         q: []const u8,
         comment: []const u8,
         _pad: proto.Padding,
-
-        const Self = @This();
-
-        pub inline fn from_bytes(src: []const u8) Error!Self {
-            return @This().from(src);
-        }
-
-        fn from(src: []const u8) Error!@This() {
-            const key = try proto.parse(Self, src);
-
-            if (!private.check_checksum(key.checksum)) return error.InvalidChecksum;
-
-            return key;
-        }
     });
 
     pub const Ecdsa = private.PrivateKey(public.Ecdsa, struct {
@@ -399,20 +390,6 @@ pub const private = struct {
         sk: []const u8,
         comment: []const u8,
         _pad: proto.Padding,
-
-        const Self = @This();
-
-        pub inline fn from_bytes(src: []const u8) Error!Self {
-            return @This().from(src);
-        }
-
-        fn from(src: []const u8) Error!Self {
-            const key = try proto.parse(Self, src);
-
-            if (!private.check_checksum(key.checksum)) return error.InvalidChecksum;
-
-            return key;
-        }
     });
 
     pub const Ed25519 = private.PrivateKey(public.Ed25519, struct {
@@ -424,19 +401,5 @@ pub const private = struct {
         sk: []const u8,
         comment: []const u8,
         _pad: proto.Padding,
-
-        const Self = @This();
-
-        pub inline fn from_bytes(src: []const u8) Error!Self {
-            return @This().from(src);
-        }
-
-        fn from(src: []const u8) Error!Self {
-            const key = try proto.parse(Self, src);
-
-            if (!private.check_checksum(key.checksum)) return error.InvalidChecksum;
-
-            return key;
-        }
     });
 };
