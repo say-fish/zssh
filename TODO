@@ -1,6 +1,6 @@
+- Add more tests
+- `zig build dist`
 - Perf keys
-- Support all private key types
-- Verify certificate signature
 - Support SSH revocation lists
 - Fuzz
 - Support for FIDO2/U2F keys (see PROTOCOL.u2f)
