@@ -78,8 +78,10 @@ test "Rsa private key with wrong passphrase" {
 
     const key = try sshcrypto.key.private.Rsa.from_pem(pem.data);
 
-    // FIXME:
-    try std.testing.expectError(error.MalformedString, key.get_private_key(std.testing.allocator, "wrong"));
+    try std.testing.expectError(
+        error.InvalidChecksum,
+        key.get_private_key(std.testing.allocator, "wrong"),
+    );
 }
 
 test "Ed25519 private key: get_private_key" {

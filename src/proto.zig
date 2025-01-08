@@ -11,6 +11,10 @@ pub const Error = error{
     InvalidLiteral,
     InvalidMagicString,
     InvalidData,
+    /// The checksum for private keys is invalid, meaning either, decryption
+    /// was not successful, or data is corrupted. This is NOT an auth form
+    /// error.
+    InvalidChecksum,
 };
 
 pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len][]const u8 {

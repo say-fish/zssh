@@ -200,6 +200,28 @@ pub const private = struct {
         return out;
     }
 
+    // XXX: Move this to proto?!
+    pub const Checksum = struct {
+        value: u64,
+
+        const Self = @This();
+
+        pub inline fn check_checksum(value: u64) bool {
+            return @as(u32, @truncate(std.math.shr(u64, value, @bitSizeOf(u32)))) ==
+                @as(u32, @truncate(value));
+        }
+
+        pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+            const next, const checksum = try proto.rfc4251.parse_int(u64, src);
+
+            // XXX: This is not realy great
+            if (!Self.check_checksum(checksum))
+                return Error.InvalidChecksum;
+
+            return .{ next, .{ .value = checksum } };
+        }
+    };
+
     pub const Cipher = struct {
         name: []const u8,
         decrypt: *const fn (
@@ -285,11 +307,6 @@ pub const private = struct {
         }
     };
 
-    inline fn check_checksum(checksum: u64) bool {
-        return @as(u32, @truncate(std.math.shr(u64, checksum, @bitSizeOf(u32)))) ==
-            @as(u32, @truncate(checksum));
-    }
-
     pub fn PrivateKey(comptime Pub: type, comptime Pri: type) type {
         return struct {
             magic: Magic(enum(u1) { openssh_key_v1 }),
@@ -335,11 +352,6 @@ pub const private = struct {
 
                         const sk = try proto.parse(Pri, private_blob);
 
-                        // TODO: Move this to hits own field since likelihood
-                        // of it failing after parsing is probably 0
-                        if (!private.check_checksum(sk.checksum))
-                            return error.InvalidChecksum;
-
                         return .{
                             .allocator = allocator,
                             .ref = private_blob,
@@ -366,7 +378,7 @@ pub const private = struct {
     }
 
     pub const Rsa = private.PrivateKey(public.Rsa, struct {
-        checksum: u64,
+        checksum: Checksum,
         kind: []const u8,
         // Public key parts
         n: []const u8,
