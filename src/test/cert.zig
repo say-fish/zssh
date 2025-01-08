@@ -15,7 +15,7 @@ test "parse rsa cert" {
 
     switch (try sshcrypto.cert.Cert.from_pem(&pem.data)) {
         .rsa => |cert| {
-            try expect_equal(cert.magic, sshcrypto.cert.Magic.ssh_rsa);
+            try expect_equal(cert.magic.value, .ssh_rsa);
             try expect_equal(cert.serial, 2);
             try expect_equal(cert.kind, sshcrypto.cert.CertType.user);
             try expect(std.mem.eql(u8, cert.key_id, "abc"));
@@ -51,7 +51,7 @@ test "parse ecdsa cert" {
 
     switch (try sshcrypto.cert.Cert.from_pem(&pem.data)) {
         .ecdsa => |cert| {
-            try expect_equal(cert.magic, sshcrypto.cert.Magic.ecdsa_sha2_nistp256);
+            try expect_equal(cert.magic.value, .ecdsa_sha2_nistp256);
             try expect_equal(cert.serial, 2);
             try expect_equal(cert.kind, sshcrypto.cert.CertType.user);
             try expect(std.mem.eql(u8, cert.key_id, "abc"));
@@ -73,7 +73,7 @@ test "parse ed25519 cert" {
 
     switch (try sshcrypto.cert.Cert.from_pem(&pem.data)) {
         .ed25519 => |cert| {
-            try expect_equal(cert.magic, sshcrypto.cert.Magic.ssh_ed25519);
+            try expect_equal(cert.magic.value, .ssh_ed25519);
             try expect_equal(cert.serial, 2);
             try expect_equal(cert.kind, sshcrypto.cert.CertType.user);
 

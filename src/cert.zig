@@ -18,6 +18,14 @@ pub const Error = error{
     UnkownExtension,
 } || proto.Error;
 
+fn Magic(comptime T: type) type {
+    return proto.GenericMagicString(
+        T,
+        "-cert-v01@openssh.com",
+        proto.rfc4251.parse_string,
+    );
+}
+
 fn GenericIteratorImpl(comptime T: type, parse_value: anytype) type {
     return struct {
         ref: []const u8,
@@ -62,49 +70,6 @@ pub const Pem = struct {
 
     pub inline fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .any) {
         return std.mem.tokenizeAny(u8, src, " ");
-    }
-};
-
-pub const Magic = enum(u3) {
-    ssh_rsa,
-    ssh_dsa,
-    ecdsa_sha2_nistp256,
-    ecdsa_sha2_nistp384,
-    ecdsa_sha2_nistp521,
-    ssh_ed25519,
-    rsa_sha2_256,
-    rsa_sha2_512,
-
-    const Self = @This();
-
-    const strings = proto.enum_to_str(Magic, "-cert-v01@openssh.com");
-
-    pub fn as_string(self: *const Self) []const u8 {
-        return strings[@intFromEnum(self.*)];
-    }
-
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Magic) {
-        const next, const magic = try proto.rfc4251.parse_string(src);
-
-        for (Self.strings, 0..) |s, i|
-            if (std.mem.eql(u8, s, magic))
-                return .{ next, @enumFromInt(i) };
-
-        return proto.Error.InvalidData;
-    }
-
-    pub fn from_slice(src: []const u8) Error!Magic {
-        for (Self.strings, 0..) |s, i|
-            if (std.mem.eql(u8, s, src))
-                return @enumFromInt(i);
-
-        return Error.InvalidMagicString;
-    }
-
-    pub fn from_bytes(src: []const u8) Error!Magic {
-        _, const magic = Self.parse(src) catch return Error.InvalidMagicString;
-
-        return magic;
     }
 };
 
@@ -318,7 +283,15 @@ pub const Cert = union(enum) {
     // TODO: from bytes...
 
     pub fn from_pem(pem: *const Pem) Error!Self {
-        const magic = try Magic.from_slice(pem.magic);
+        const magic = try Magic(enum {
+            ssh_rsa,
+            ecdsa_sha2_nistp256,
+            ecdsa_sha2_nistp384,
+            ecdsa_sha2_nistp521,
+            ssh_ed25519,
+            rsa_sha2_256,
+            rsa_sha2_512,
+        }).from_slice(pem.magic);
 
         return switch (magic) {
             .ssh_rsa,
@@ -333,16 +306,14 @@ pub const Cert = union(enum) {
 
             .ssh_ed25519,
             => .{ .ed25519 = try Ed25519.from_pem(pem) },
-
-            else => @panic("DSA certificates are not supported"),
         };
     }
 };
 
-fn Certificate(comptime T: type) type {
+fn Certificate(comptime M: type, comptime T: type) type {
     // TODO: assert T is a struct
     return struct {
-        magic: Magic,
+        magic: M,
         nonce: []const u8,
         public_key: T,
         serial: u64,
@@ -373,7 +344,7 @@ fn Certificate(comptime T: type) type {
     };
 }
 
-pub const Rsa = Certificate(struct {
+pub const Rsa = Certificate(Magic(enum { ssh_rsa }), struct {
     e: []const u8,
     n: []const u8,
 
@@ -387,7 +358,11 @@ pub const Rsa = Certificate(struct {
     }
 });
 
-pub const Ecdsa = Certificate(struct {
+pub const Ecdsa = Certificate(Magic(enum {
+    ecdsa_sha2_nistp256,
+    ecdsa_sha2_nistp384,
+    ecdsa_sha2_nistp521,
+}), struct {
     curve: []const u8,
     pk: []const u8,
 
@@ -401,7 +376,9 @@ pub const Ecdsa = Certificate(struct {
     }
 });
 
-pub const Ed25519 = Certificate(struct {
+pub const Ed25519 = Certificate(Magic(enum {
+    ssh_ed25519,
+}), struct {
     pk: []const u8,
 
     const Self = @This();

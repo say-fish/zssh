@@ -13,47 +13,6 @@ pub const Error = error{
 } || proto.Error || std.mem.Allocator.Error;
 
 pub const public = struct {
-    /// NOTE: DSA keys are not supported
-    pub const Magic = enum(u3) {
-        ssh_rsa,
-        ecdsa_sha2_nistp256,
-        ecdsa_sha2_nistp384,
-        ecdsa_sha2_nistp521,
-        ssh_ed25519,
-
-        const Self = @This();
-
-        const strings = proto.enum_to_str(Self, "");
-
-        pub inline fn as_string(self: *const Self) []const u8 {
-            return strings[@intFromEnum(self.*)];
-        }
-
-        pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Magic) {
-            const next, const magic = try proto.rfc4251.parse_string(src);
-
-            for (Self.strings, 0..) |s, i|
-                if (std.mem.eql(u8, s, magic))
-                    return .{ next, @enumFromInt(i) };
-
-            return proto.Error.InvalidData;
-        }
-
-        pub fn from_string(str: []const u8) Error!Magic {
-            for (Self.strings, 0..) |s, i|
-                if (std.mem.eql(u8, s, str))
-                    return @enumFromInt(i);
-
-            return Error.InvalidMagicString;
-        }
-
-        pub fn from_bytes(src: []const u8) Error!Magic {
-            _, const magic = Self.parse(src) catch return Error.InvalidMagicString;
-
-            return magic;
-        }
-    };
-
     // TODO: add support for FIDO2/U2F keys
 
     pub const Pem = struct {
@@ -66,8 +25,12 @@ pub const public = struct {
         }
     };
 
+    fn Magic(comptime T: type) type {
+        return proto.GenericMagicString(T, "", proto.rfc4251.parse_string);
+    }
+
     pub const Rsa = struct {
-        magic: Magic,
+        magic: Magic(enum(u1) { ssh_rsa }),
         e: []const u8, // TODO: mpint
         n: []const u8, // TODO: mpint
 
@@ -88,7 +51,11 @@ pub const public = struct {
     };
 
     pub const Ecdsa = struct {
-        magic: Magic,
+        magic: Magic(enum {
+            ecdsa_sha2_nistp256,
+            ecdsa_sha2_nistp384,
+            ecdsa_sha2_nistp521,
+        }),
         curve: []const u8,
         pk: []const u8,
 
@@ -109,7 +76,7 @@ pub const public = struct {
     };
 
     pub const Ed25519 = struct {
-        magic: Magic,
+        magic: Magic(enum(u1) { ssh_ed25519 }),
         pk: []const u8,
 
         const Self = @This();
@@ -147,7 +114,13 @@ pub const public = struct {
         pub fn from_bytes(src: []const u8) !Self {
             _, const magic = try proto.rfc4251.parse_string(src);
 
-            return switch (try Magic.from_string(magic)) {
+            return switch (try Magic(enum {
+                ssh_rsa,
+                ecdsa_sha2_nistp256,
+                ecdsa_sha2_nistp384,
+                ecdsa_sha2_nistp521,
+                ssh_ed25519,
+            }).from_slice(magic)) {
                 .ssh_rsa,
                 => .{ .rsa = try Rsa.from_bytes(src) },
 
@@ -179,33 +152,9 @@ pub const private = struct {
         };
     }
 
-    pub const Magic = enum(u1) {
-        openssh_key_v1,
-
-        const Self = @This();
-
-        const strings = proto.enum_to_str(Self, "");
-
-        pub inline fn as_string(self: *const Self) []const u8 {
-            return strings[@intFromEnum(self.*)];
-        }
-
-        pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Magic) {
-            const next, const magic = try proto.read_null_terminated(src);
-
-            inline for (comptime Self.strings, 0..) |s, i|
-                if (std.mem.eql(u8, s, magic))
-                    return .{ next, @enumFromInt(i) };
-
-            return proto.Error.InvalidData;
-        }
-
-        pub fn from_bytes(src: []const u8) Error!Magic {
-            _, const magic = Self.parse(src) catch return Error.InvalidMagicString;
-
-            return magic;
-        }
-    };
+    fn Magic(comptime T: type) type {
+        return proto.GenericMagicString(T, "", proto.read_null_terminated);
+    }
 
     pub fn decrypt_aes_256_ctr(
         allocator: std.mem.Allocator,
@@ -343,7 +292,7 @@ pub const private = struct {
 
     pub fn PrivateKey(comptime Pub: type, comptime Pri: type) type {
         return struct {
-            magic: Magic,
+            magic: Magic(enum(u1) { openssh_key_v1 }),
             cipher: Cipher,
             kdf_name: []const u8,
             kdf: Kdf, // TODO: Make this optional

@@ -9,6 +9,7 @@ pub const Error = error{
     MalformedMpInt, // TODO:
     /// Object specific invalid data
     InvalidLiteral,
+    InvalidMagicString,
     InvalidData,
 };
 
@@ -32,6 +33,51 @@ pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len]
     }
 
     return ret;
+}
+
+/// Magic string format used by OpenSSH
+pub fn GenericMagicString(
+    comptime T: type,
+    comptime sufix: []const u8,
+    f: anytype,
+) type {
+    return struct {
+        // TODO: Assert T is an enum
+        // TODO: Assert F is what we want
+        value: T,
+
+        const Self = @This();
+
+        const strings = enum_to_str(T, sufix);
+
+        pub inline fn as_string(self: *const Self) []const u8 {
+            return strings[@intFromEnum(self.value)];
+        }
+
+        pub inline fn parse(src: []const u8) Error!Cont(Self) {
+            const next, const magic = try f(src);
+
+            for (Self.strings, 0..) |s, i|
+                if (std.mem.eql(u8, s, magic))
+                    return .{ next, .{ .value = @enumFromInt(i) } };
+
+            return Error.InvalidData;
+        }
+
+        pub fn from_slice(src: []const u8) Error!T {
+            for (Self.strings, 0..) |s, i|
+                if (std.mem.eql(u8, s, src))
+                    return @enumFromInt(i);
+
+            return Error.InvalidMagicString;
+        }
+
+        pub fn from_bytes(src: []const u8) Error!Self {
+            _, const magic = try Self.parse(src);
+
+            return magic;
+        }
+    };
 }
 
 // Parser continuation
