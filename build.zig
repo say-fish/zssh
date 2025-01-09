@@ -11,6 +11,7 @@ const PERF_EVENTS: []const u8 = "cache-references,cache-misses,cycles,instructio
 
 const TEST_CERTS_PATH: []const u8 = "tools/certs/";
 const TEST_KEYS_PATH: []const u8 = "tools/keys/";
+const TEST_SIGS_PATH: []const u8 = "tools/sig/";
 
 const TestAssets = ArrayList(Tuple(&.{ []u8, []u8 }));
 
@@ -95,10 +96,13 @@ pub fn build(b: *std.Build) void {
     arena.deinit();
 
     const certs = get_test_assets(arena.allocator(), TEST_CERTS_PATH) catch
-        @panic("Fail to get test certs assets");
+        @panic("Fail to get test certs");
 
     const keys = get_test_assets(arena.allocator(), TEST_KEYS_PATH) catch
-        @panic("Fail to get test keys assets");
+        @panic("Fail to get test keys");
+
+    const sigs = get_test_assets(arena.allocator(), TEST_SIGS_PATH) catch
+        @panic("Fail to get test sigs");
 
     const test_step = b.step("test", "Run unit tests");
     {
@@ -127,6 +131,15 @@ pub fn build(b: *std.Build) void {
             .mod = mod,
             .mod_name = "sshcrypto",
             .assets = &keys,
+        }) catch @panic("OOM");
+
+        add_test(b, test_step, .{
+            .root_source_file = b.path("src/test/sig.zig"),
+            .target = target,
+            .optimize = optimize,
+            .mod = mod,
+            .mod_name = "sshcrypto",
+            .assets = &sigs,
         }) catch @panic("OOM");
     }
 

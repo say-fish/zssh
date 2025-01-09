@@ -9,6 +9,7 @@ pub const Error = error{
     MalformedMpInt, // TODO:
     /// Object specific invalid data
     InvalidLiteral,
+    /// Invalid/Unsupported magic string
     InvalidMagicString,
     InvalidData,
     /// The checksum for private keys is invalid, meaning either, decryption
@@ -103,11 +104,11 @@ pub const rfc4251 = struct {
         return std.mem.readVarInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
     }
 
-    pub inline fn parse_int(comptime T: type, buf: []const u8) Error!struct { usize, T } {
+    pub inline fn parse_int(comptime T: type, buf: []const u8) Error!Cont(T) {
         return .{ @sizeOf(T), try read_int(T, buf) };
     }
 
-    pub inline fn parse_string(buf: []const u8) Error!struct { usize, []const u8 } {
+    pub inline fn parse_string(buf: []const u8) Error!Cont([]const u8) {
         const size = @sizeOf(u32) + try read_int(u32, buf);
 
         if (size > buf.len) {
@@ -175,8 +176,6 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
     var ret: T = undefined;
 
     var i: usize = 0;
-
-    // TODO: Skip magic, since we need to verify it anyways
 
     inline for (comptime std.meta.fields(T)) |f| {
         const ref = src[i..];

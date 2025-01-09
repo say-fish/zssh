@@ -178,6 +178,7 @@ pub const pem = struct {
     pub const PublicKeyDecoder = GenericDecoder(key.public.Pem, std.base64.Base64Decoder);
     pub const PrivateKeyDecoder = GenericDecoder(key.private.Pem, std.base64.Base64DecoderWithIgnore);
     pub const CertificateDecoder = GenericDecoder(cert.Pem, std.base64.Base64Decoder);
+    pub const SshsigDecoder = GenericDecoder(sig.sshsig.Pem, std.base64.Base64DecoderWithIgnore);
 };
 
 pub const base64 = struct {
