@@ -25,16 +25,18 @@ pub const public = struct {
         }
     };
 
-    fn Magic(comptime T: type) type {
+    fn MagicString(comptime T: type) type {
         return proto.GenericMagicString(T, "", proto.rfc4251.parse_string);
     }
 
     pub const Rsa = struct {
-        magic: Magic(enum(u1) { ssh_rsa }),
+        magic: Magic,
         e: []const u8, // TODO: mpint
         n: []const u8, // TODO: mpint
 
         const Self = @This();
+
+        const Magic = MagicString(enum(u1) { ssh_rsa });
 
         fn from(src: []const u8) Error!Rsa {
             return try proto.parse(Self, src);
@@ -51,15 +53,17 @@ pub const public = struct {
     };
 
     pub const Ecdsa = struct {
-        magic: Magic(enum {
-            ecdsa_sha2_nistp256,
-            ecdsa_sha2_nistp384,
-            ecdsa_sha2_nistp521,
-        }),
+        magic: Magic,
         curve: []const u8,
         pk: []const u8,
 
         const Self = @This();
+
+        const Magic = MagicString(enum {
+            ecdsa_sha2_nistp256,
+            ecdsa_sha2_nistp384,
+            ecdsa_sha2_nistp521,
+        });
 
         fn from(src: []const u8) Error!Ecdsa {
             return try proto.parse(Self, src);
@@ -76,10 +80,12 @@ pub const public = struct {
     };
 
     pub const Ed25519 = struct {
-        magic: Magic(enum(u1) { ssh_ed25519 }),
+        magic: Magic,
         pk: []const u8,
 
         const Self = @This();
+
+        pub const Magic = MagicString(enum(u1) { ssh_ed25519 });
 
         fn from(src: []const u8) Error!Ed25519 {
             return try proto.parse(Self, src);
@@ -102,6 +108,14 @@ pub const public = struct {
 
         const Self = @This();
 
+        pub const Magic = MagicString(enum {
+            ssh_rsa,
+            ecdsa_sha2_nistp256,
+            ecdsa_sha2_nistp384,
+            ecdsa_sha2_nistp521,
+            ssh_ed25519,
+        });
+
         pub fn parse(src: []const u8) proto.Error!proto.Cont(Pk) {
             const next, const pk = try proto.rfc4251.parse_string(src);
 
@@ -114,13 +128,7 @@ pub const public = struct {
         pub fn from_bytes(src: []const u8) !Self {
             _, const magic = try proto.rfc4251.parse_string(src);
 
-            return switch (try Magic(enum {
-                ssh_rsa,
-                ecdsa_sha2_nistp256,
-                ecdsa_sha2_nistp384,
-                ecdsa_sha2_nistp521,
-                ssh_ed25519,
-            }).from_slice(magic)) {
+            return switch (try Magic.from_slice(magic)) {
                 .ssh_rsa,
                 => .{ .rsa = try Rsa.from_bytes(src) },
 
@@ -152,7 +160,7 @@ pub const private = struct {
         };
     }
 
-    fn Magic(comptime T: type) type {
+    fn MagicString(comptime T: type) type {
         return proto.GenericMagicString(T, "", proto.read_null_terminated);
     }
 
@@ -309,7 +317,7 @@ pub const private = struct {
 
     pub fn PrivateKey(comptime Pub: type, comptime Pri: type) type {
         return struct {
-            magic: Magic(enum(u1) { openssh_key_v1 }),
+            magic: Magic,
             cipher: Cipher,
             kdf_name: []const u8,
             kdf: Kdf, // TODO: Make this optional
@@ -318,6 +326,8 @@ pub const private = struct {
             private_key_blob: []const u8,
 
             const Self = @This();
+
+            pub const Magic = MagicString(enum(u1) { openssh_key_v1 });
 
             /// Returns `true` if the `private_key_blob` is encrypted, i.e.,
             /// cipher.name != "none"

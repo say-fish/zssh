@@ -18,7 +18,7 @@ pub const Error = error{
     UnkownExtension,
 } || proto.Error;
 
-fn Magic(comptime T: type) type {
+fn MagicString(comptime T: type) type {
     return proto.GenericMagicString(
         T,
         "-cert-v01@openssh.com",
@@ -280,18 +280,20 @@ pub const Cert = union(enum) {
 
     const Self = @This();
 
+    pub const Magic = MagicString(enum {
+        ssh_rsa,
+        ecdsa_sha2_nistp256,
+        ecdsa_sha2_nistp384,
+        ecdsa_sha2_nistp521,
+        ssh_ed25519,
+        rsa_sha2_256,
+        rsa_sha2_512,
+    });
+
     // TODO: from bytes...
 
     pub fn from_pem(pem: *const Pem) Error!Self {
-        const magic = try Magic(enum {
-            ssh_rsa,
-            ecdsa_sha2_nistp256,
-            ecdsa_sha2_nistp384,
-            ecdsa_sha2_nistp521,
-            ssh_ed25519,
-            rsa_sha2_256,
-            rsa_sha2_512,
-        }).from_slice(pem.magic);
+        const magic = try Magic.from_slice(pem.magic);
 
         return switch (magic) {
             .ssh_rsa,
@@ -330,6 +332,8 @@ fn Certificate(comptime M: type, comptime T: type) type {
 
         const Self = @This();
 
+        pub const Magic = M;
+
         fn from(src: []const u8) Error!Self {
             return try proto.parse(Self, src);
         }
@@ -344,7 +348,7 @@ fn Certificate(comptime M: type, comptime T: type) type {
     };
 }
 
-pub const Rsa = Certificate(Magic(enum { ssh_rsa }), struct {
+pub const Rsa = Certificate(MagicString(enum { ssh_rsa }), struct {
     e: []const u8,
     n: []const u8,
 
@@ -358,7 +362,7 @@ pub const Rsa = Certificate(Magic(enum { ssh_rsa }), struct {
     }
 });
 
-pub const Ecdsa = Certificate(Magic(enum {
+pub const Ecdsa = Certificate(MagicString(enum {
     ecdsa_sha2_nistp256,
     ecdsa_sha2_nistp384,
     ecdsa_sha2_nistp521,
@@ -376,7 +380,7 @@ pub const Ecdsa = Certificate(Magic(enum {
     }
 });
 
-pub const Ed25519 = Certificate(Magic(enum {
+pub const Ed25519 = Certificate(MagicString(enum {
     ssh_ed25519,
 }), struct {
     pk: []const u8,

@@ -3,8 +3,8 @@ const proto = @import("proto.zig");
 const key = @import("key.zig");
 
 // TODO: Error
-//
-fn Magic(comptime T: type) type {
+
+fn MagicString(comptime T: type) type {
     return proto.GenericMagicString(T, "", proto.rfc4251.parse_string);
 }
 
@@ -20,15 +20,17 @@ fn Magic(comptime T: type) type {
 ///    S that omits them.  A verifier MAY accept shorter encodings of S with
 ///    one or more leading zeros omitted.
 pub const rfc8332 = struct {
-    magic: Magic(enum(u1) {
-        rsa_sha2_256,
-        rsa_sha2_512,
-    }),
+    magic: Magic,
     blob: []const u8,
 
     const Self = @This();
 
-    fn from(src: []const u8) proto.Error!Self {
+    const Magic = MagicString(enum(u1) {
+        rsa_sha2_256,
+        rsa_sha2_512,
+    });
+
+    inline fn from(src: []const u8) proto.Error!Self {
         return try proto.parse(Self, src);
     }
 
@@ -54,10 +56,7 @@ pub const rfc8332 = struct {
 ///
 ///   The integers r and s are the output of the ECDSA algorithm.
 pub const rfc5656 = struct {
-    magic: Magic(enum {
-        ecdsa_sha2_nistp256,
-        ecdsa_sha2_nistp512,
-    }),
+    magic: Magic,
     blob: struct {
         r: []const u8,
         s: []const u8,
@@ -77,6 +76,11 @@ pub const rfc5656 = struct {
 
     const Self = @This();
 
+    const Magic = MagicString(enum {
+        ecdsa_sha2_nistp256,
+        ecdsa_sha2_nistp512,
+    });
+
     fn from(src: []const u8) proto.Error!Self {
         return try proto.parse(Self, src);
     }
@@ -92,10 +96,12 @@ pub const rfc5656 = struct {
 /// PureEdDSA signature of PH(M).  In other words, EdDSA simply uses PureEdDSA
 /// to sign PH(M).
 pub const rfc8032 = struct {
-    magic: Magic(enum(u1) { ssh_ed25519 }),
+    magic: Magic,
     sm: []const u8,
 
     const Self = @This();
+
+    pub const Magic = MagicString(enum(u1) { ssh_ed25519 });
 
     fn from(src: []const u8) proto.Error!Self {
         return try proto.parse(Self, src);
@@ -121,7 +127,8 @@ pub const sshsig = struct {
         }.parse_string_fixed);
     }
 
-    magic: MagicPreamble(enum(u1) { SSHSIG }),
+    /// Magic string, must be "SSHSIG"
+    magic: Magic,
     /// Verifiers MUST reject signatures with versions greater than those they
     /// support.
     version: u32,
@@ -138,10 +145,15 @@ pub const sshsig = struct {
     /// into the signature. Implementations should ignore the reserved field if
     /// it is not empty.
     reserved: []const u8,
-    hash_algorithm: Magic(enum(u1) { sha256, sha512 }),
+    /// The supported hash algorithms are "sha256" and "sha512".
+    hash_algorithm: HashAlgorithms,
     signature: Sig,
 
     const Self = @This();
+
+    pub const Magic = MagicPreamble(enum(u1) { SSHSIG });
+
+    pub const HashAlgorithms = MagicString(enum(u1) { sha256, sha512 });
 
     fn from(src: []const u8) !Self {
         return try proto.parse(Self, src);
@@ -175,6 +187,14 @@ pub const Sig = union(enum) {
 
     const Self = @This();
 
+    const Magic = MagicString(enum {
+        rsa_sha2_256,
+        rsa_sha2_512,
+        ecdsa_sha2_nistp256,
+        ecdsa_sha2_nistp512,
+        ssh_ed25519,
+    });
+
     pub fn parse(src: []const u8) proto.Error!proto.Cont(Sig) {
         const next, const pk = try proto.rfc4251.parse_string(src);
 
@@ -187,13 +207,7 @@ pub const Sig = union(enum) {
     pub fn from_bytes(src: []const u8) !Sig {
         _, const magic = try proto.rfc4251.parse_string(src);
 
-        return switch (try Magic(enum {
-            rsa_sha2_256,
-            rsa_sha2_512,
-            ecdsa_sha2_nistp256,
-            ecdsa_sha2_nistp512,
-            ssh_ed25519,
-        }).from_slice(magic)) {
+        return switch (try Magic.from_slice(magic)) {
             .rsa_sha2_256,
             .rsa_sha2_512,
             => return .{ .rsa = try rfc8332.from(src) },
