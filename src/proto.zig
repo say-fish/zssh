@@ -94,7 +94,7 @@ pub fn Cont(comptime T: type) type {
 }
 
 pub const rfc4251 = struct {
-    pub inline fn read_int(comptime T: type, buf: []const u8) Error!T {
+    inline fn read_int(comptime T: type, buf: []const u8) Error!T {
         if (buf.len < @sizeOf(T)) {
             @branchHint(.unlikely);
 
@@ -125,10 +125,12 @@ pub fn read_null_terminated(src: []const u8) Error!Cont([:0]u8) {
     var i: u32 = 0;
 
     while (i != src.len) : (i += 1) {
-        if (src[i] == 0x00) break;
+        if (src[i] == 0x00) {
+            return .{ i + 1, @constCast(@ptrCast(src[0..i])) };
+        }
     }
 
-    return .{ i + 1, @constCast(@ptrCast(src[0..i])) };
+    return Error.MalformedString;
 }
 
 pub const Padding = struct {

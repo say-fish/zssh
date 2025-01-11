@@ -2,7 +2,7 @@ const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
 
-const MAX_RUNS: usize = 0x01 << 25;
+const MAX_RUNS: usize = 0x01 << 30;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
