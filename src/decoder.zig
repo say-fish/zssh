@@ -1,7 +1,5 @@
 const std = @import("std");
-const key = @import("key.zig");
-const cert = @import("cert.zig");
-const sig = @import("sig.zig");
+const builtin = @import("builtin");
 
 // TODO: AutoDecoder
 
@@ -9,7 +7,7 @@ const sig = @import("sig.zig");
 ///
 /// TODO: Memory is owned by Der, with refrences to the original data which
 /// **SHOULD** outlive Der.
-fn GenericDecoder(comptime T: type, comptime D: type) type {
+pub fn GenericDecoder(comptime T: type, comptime D: type) type {
     if (@typeInfo(T) != .@"struct")
         @compileError("Expected struct");
 
@@ -127,7 +125,6 @@ fn GenericDecoder(comptime T: type, comptime D: type) type {
         }
 
         pub fn decode(self: *const Self, src: []const u8) !Managed(T) {
-            const builtin = @import("builtin");
             // XXX: ssh-keygen -> authfile.c:sshkey_save_public saves the
             // comment with a new line ending (\r\n on Windows), this will be
             // true as well if there's is no comment. We just ignore it since
@@ -165,13 +162,6 @@ fn GenericDecoder(comptime T: type, comptime D: type) type {
         }
     };
 }
-
-pub const pem = struct {
-    pub const PublicKeyDecoder = GenericDecoder(key.public.Pem, std.base64.Base64Decoder);
-    pub const PrivateKeyDecoder = GenericDecoder(key.private.Pem, std.base64.Base64DecoderWithIgnore);
-    pub const CertificateDecoder = GenericDecoder(cert.Pem, std.base64.Base64Decoder);
-    pub const SshsigDecoder = GenericDecoder(sig.Sshsig.Pem, std.base64.Base64DecoderWithIgnore);
-};
 
 pub const base64 = struct {
     pub const pem = struct {

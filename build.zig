@@ -9,9 +9,8 @@ const Allocator = std.mem.Allocator;
 
 const PERF_EVENTS: []const u8 = "cache-references,cache-misses,cycles,instructions,branches,faults,migrations";
 
-const TEST_CERTS_PATH: []const u8 = "tools/certs/";
-const TEST_KEYS_PATH: []const u8 = "tools/keys/";
-const TEST_SIGS_PATH: []const u8 = "tools/sig/";
+// FIXME:
+const TEST_ASSETS_PATH: []const u8 = "assets/";
 
 const TestAssets = ArrayList(Tuple(&.{ []u8, []u8 }));
 
@@ -48,8 +47,8 @@ const Test = struct {
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
 
-    mod: ?*std.Build.Module,
-    mod_name: ?[]const u8,
+    mod: ?*std.Build.Module = null,
+    mod_name: ?[]const u8 = null,
 
     assets: ?*const TestAssets = null,
 };
@@ -95,68 +94,43 @@ pub fn build(b: *std.Build) void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     arena.deinit();
 
-    const certs = get_test_assets(arena.allocator(), TEST_CERTS_PATH) catch
+    const assets = get_test_assets(arena.allocator(), TEST_ASSETS_PATH) catch
         @panic("Fail to get test certs");
-
-    const keys = get_test_assets(arena.allocator(), TEST_KEYS_PATH) catch
-        @panic("Fail to get test keys");
-
-    const sigs = get_test_assets(arena.allocator(), TEST_SIGS_PATH) catch
-        @panic("Fail to get test sigs");
 
     const test_step = b.step("test", "Run unit tests");
     {
         add_test(b, test_step, .{
-            .root_source_file = b.path("src/test/cert.zig"),
+            .root_source_file = b.path("test/cert.zig"),
             .target = target,
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
-            .assets = &certs,
+            .assets = &assets,
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
-            .root_source_file = b.path("src/test/key.zig"),
+            .root_source_file = b.path("test/sig.zig"),
             .target = target,
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
-            .assets = &keys,
+            .assets = &assets,
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
-            .root_source_file = b.path("src/test/decode.zig"),
+            .root_source_file = b.path("test/key.zig"),
             .target = target,
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
-            .assets = &keys,
-        }) catch @panic("OOM");
-
-        add_test(b, test_step, .{
-            .root_source_file = b.path("src/test/sig.zig"),
-            .target = target,
-            .optimize = optimize,
-            .mod = mod,
-            .mod_name = "sshcrypto",
-            .assets = &sigs,
+            .assets = &assets,
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
             .root_source_file = b.path("src/proto.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "proto",
-        }) catch @panic("OOM");
-
-        add_test(b, test_step, .{
-            .root_source_file = b.path("src/sig.zig"),
-            .target = target,
-            .optimize = optimize,
-            .mod = mod,
-            .mod_name = "sig",
-            .assets = &sigs,
+            .assets = &assets,
         }) catch @panic("OOM");
     }
 
@@ -183,14 +157,14 @@ pub fn build(b: *std.Build) void {
     {
         const perf_exe = b.addExecutable(.{
             .name = "cert_perf",
-            .root_source_file = b.path("src/perf/cert.zig"),
+            .root_source_file = b.path("perf/cert.zig"),
             .target = target,
             .optimize = optimize,
         });
 
         perf_exe.root_module.addImport("sshcrypto", mod);
 
-        for (certs.items) |cert| {
+        for (assets.items) |cert| {
             const name, const file = cert;
             perf_exe.root_module.addAnonymousImport(
                 name,

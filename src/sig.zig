@@ -1,6 +1,9 @@
 const std = @import("std");
-const proto = @import("proto.zig");
+const builtin = @import("builtin");
+
+const decoder = @import("decoder.zig");
 const key = @import("key.zig");
+const proto = @import("proto.zig");
 
 // TODO: Error
 
@@ -119,25 +122,25 @@ pub const rfc8032 = struct {
     }
 };
 
-pub const Sshsig = struct {
+pub const SshSig = struct {
+    inline fn parse_fixed_string(src: []const u8) proto.Error!proto.Cont([6]u8) {
+        if (src.len < 6) {
+            return proto.Error.MalformedString;
+        }
+
+        return .{ 6, src[0..6].* };
+    }
+
+    inline fn fixed_string_encoded_size(_: anytype) u32 {
+        return 6;
+    }
+
     fn MagicPreamble(comptime T: type) type {
         return proto.GenericMagicString(
             T,
             "",
-            struct {
-                fn parse_string_fixed(src: []const u8) proto.Error!proto.Cont([6]u8) {
-                    if (src.len < 6) {
-                        return proto.Error.MalformedString;
-                    }
-
-                    return .{ 6, src[0..6].* };
-                }
-            }.parse_string_fixed,
-            struct {
-                inline fn six(_: anytype) u32 {
-                    return 6;
-                }
-            }.six,
+            parse_fixed_string,
+            fixed_string_encoded_size,
         );
     }
 
@@ -147,7 +150,7 @@ pub const Sshsig = struct {
     /// support.
     version: u32,
     /// See: `sshcrypto.key.public.Pk`
-    publickey: key.public.Pk,
+    publickey: key.pk.Pk,
     /// The purpose of the namespace value is to specify a unambiguous
     /// interpretation domain for the signature, e.g. file signing. This
     /// prevents cross-protocol attacks caused by signatures intended for one
@@ -165,9 +168,11 @@ pub const Sshsig = struct {
 
     const Self = @This();
 
-    pub const Magic = MagicPreamble(enum(u1) { SSHSIG });
+    pub const SshSigDecoder = decoder.GenericDecoder(Pem, std.base64.Base64DecoderWithIgnore);
 
-    pub const HashAlgorithm = MagicString(enum(u1) { sha256, sha512 });
+    pub const Magic = MagicPreamble(enum { SSHSIG });
+
+    pub const HashAlgorithm = MagicString(enum { sha256, sha512 });
 
     fn from(src: []const u8) !Self {
         return try proto.parse(Self, src);
@@ -200,12 +205,12 @@ pub const Sshsig = struct {
         hash_algorithm: HashAlgorithm,
         hmsg: []const u8,
 
-        fn from(src: []const u8) !@This() {
-            return try proto.parse(@This(), src);
+        fn from(src: []const u8) !Blob {
+            return try proto.parse(Blob, src);
         }
 
-        pub inline fn from_bytes(src: []const u8) !@This() {
-            return try @This().from(src);
+        pub inline fn from_bytes(src: []const u8) !Blob {
+            return try Blob.from(src);
         }
     };
 
@@ -299,18 +304,3 @@ pub const Sig = union(enum) {
         };
     }
 };
-
-const decoder = @import("decoder.zig");
-
-const sshsig_decoder = decoder.pem.SshsigDecoder
-    .init(std.testing.allocator, decoder.base64.pem.Decoder);
-
-test "blob" {
-    const pem = try sshsig_decoder.decode(@embedFile("test.file.sig"));
-    defer pem.deinit();
-
-    const sshsig = try Sshsig.from_pem(pem.data);
-
-    var blob = try sshsig.get_signature_blob(std.testing.allocator, &[_]u8{0x00});
-    defer blob.deinit();
-}

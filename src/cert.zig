@@ -6,8 +6,10 @@
 //! parsed certificate.
 
 const std = @import("std");
+
+const decoder = @import("decoder.zig");
+const key = @import("key.zig");
 const proto = @import("proto.zig");
-const keys = @import("key.zig");
 const sig = @import("sig.zig");
 
 pub const Error = error{
@@ -129,8 +131,8 @@ pub const CriticalOptions = struct {
     pub const Iterator = GenericIterator(
         struct {
             // FIXME: Should return an error
-            inline fn parse_value(ref: []const u8, off: *usize, key: []const u8) ?CriticalOption {
-                const opt = Self.is_valid_option(key) orelse
+            inline fn parse_value(ref: []const u8, off: *usize, k: []const u8) ?CriticalOption {
+                const opt = Self.is_valid_option(k) orelse
                     return null;
 
                 const next, const buf = proto.rfc4251.parse_string(ref[off.*..]) catch
@@ -214,11 +216,11 @@ pub const Extensions = struct {
 
     pub const Iterator = GenericIterator(
         struct {
-            inline fn parse_value(ref: []const u8, off: *usize, key: []const u8) ?[]const u8 {
+            inline fn parse_value(ref: []const u8, off: *usize, k: []const u8) ?[]const u8 {
                 // Skip empty pair
                 if (ref.len != off.*) off.* += @sizeOf(u32);
 
-                return key;
+                return k;
             }
         }.parse_value,
     );
@@ -255,6 +257,8 @@ const Principals = struct {
 
     const Self = @This();
 
+    pub const Iterator = GenericIterator(Self.parse_value);
+
     pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Principals) {
         const next, const ref = try proto.rfc4251.parse_string(src);
 
@@ -265,13 +269,9 @@ const Principals = struct {
         return .{ .ref = self.ref, .off = 0 };
     }
 
-    pub const Iterator = GenericIterator(
-        struct {
-            inline fn parse_value(_: []const u8, _: *usize, key: []const u8) ?[]const u8 {
-                return key;
-            }
-        }.parse_value,
-    );
+    inline fn parse_value(_: []const u8, _: *usize, k: []const u8) ?[]const u8 {
+        return k;
+    }
 };
 
 pub const Cert = union(enum) {
@@ -313,7 +313,9 @@ pub const Cert = union(enum) {
     }
 };
 
-fn Certificate(comptime M: type, comptime T: type) type {
+pub const CertDecoder = decoder.GenericDecoder(Pem, std.base64.Base64Decoder);
+
+fn GenericCert(comptime M: type, comptime T: type) type {
     // TODO: assert T is a struct
     return struct {
         magic: M,
@@ -328,7 +330,7 @@ fn Certificate(comptime M: type, comptime T: type) type {
         critical_options: CriticalOptions,
         extensions: Extensions,
         reserved: []const u8,
-        signature_key: keys.public.Pk,
+        signature_key: key.pk.Pk,
         signature: sig.Sig,
 
         const Self = @This();
@@ -349,7 +351,7 @@ fn Certificate(comptime M: type, comptime T: type) type {
     };
 }
 
-pub const Rsa = Certificate(MagicString(enum { ssh_rsa }), struct {
+pub const Rsa = GenericCert(MagicString(enum { ssh_rsa }), struct {
     e: []const u8,
     n: []const u8,
 
@@ -363,7 +365,7 @@ pub const Rsa = Certificate(MagicString(enum { ssh_rsa }), struct {
     }
 });
 
-pub const Ecdsa = Certificate(MagicString(enum {
+pub const Ecdsa = GenericCert(MagicString(enum {
     ecdsa_sha2_nistp256,
     ecdsa_sha2_nistp384,
     ecdsa_sha2_nistp521,
@@ -381,9 +383,7 @@ pub const Ecdsa = Certificate(MagicString(enum {
     }
 });
 
-pub const Ed25519 = Certificate(MagicString(enum {
-    ssh_ed25519,
-}), struct {
+pub const Ed25519 = GenericCert(MagicString(enum { ssh_ed25519 }), struct {
     pk: []const u8,
 
     const Self = @This();

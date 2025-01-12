@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const proto = @import("proto.zig");
+const decoder = @import("decoder.zig");
 
 pub const Error = error{
     /// This indicates, either: PEM corruption, DER corruption, or an
@@ -12,8 +13,10 @@ pub const Error = error{
     InvalidChecksum,
 } || proto.Error || std.mem.Allocator.Error;
 
-pub const public = struct {
+pub const pk = struct {
     // TODO: add support for FIDO2/U2F keys
+
+    pub const PkDecoder = decoder.GenericDecoder(Pem, std.base64.Base64Decoder);
 
     pub const Pem = struct {
         magic: []const u8,
@@ -122,11 +125,11 @@ pub const public = struct {
         });
 
         pub fn parse(src: []const u8) proto.Error!proto.Cont(Pk) {
-            const next, const pk = try proto.rfc4251.parse_string(src);
+            const next, const key = try proto.rfc4251.parse_string(src);
 
             return .{
                 next,
-                Self.from_bytes(pk) catch return Error.InvalidData,
+                Self.from_bytes(key) catch return Error.InvalidData,
             };
         }
 
@@ -149,7 +152,9 @@ pub const public = struct {
     };
 };
 
-pub const private = struct {
+pub const sk = struct {
+    pub const SkDecoder = decoder.GenericDecoder(Pem, std.base64.Base64DecoderWithIgnore);
+
     pub fn Managed(comptime T: type) type {
         return struct {
             data: T,
@@ -325,7 +330,7 @@ pub const private = struct {
         }
     };
 
-    pub fn PrivateKey(comptime Pub: type, comptime Pri: type) type {
+    pub fn Sk(comptime Pub: type, comptime Pri: type) type {
         return struct {
             magic: Magic,
             cipher: Cipher,
@@ -360,7 +365,7 @@ pub const private = struct {
                 if (self.is_encrypted() and passphrase == null)
                     return error.MissingPassphrase;
 
-                inline for (comptime private.Cipher.ciphers) |cipher| {
+                inline for (comptime sk.Cipher.ciphers) |cipher| {
                     if (std.mem.eql(u8, cipher.name, self.cipher.name)) {
                         const private_blob = try cipher.decrypt(
                             allocator,
@@ -370,12 +375,12 @@ pub const private = struct {
                         );
                         errdefer allocator.free(private_blob);
 
-                        const sk = try proto.parse(Pri, private_blob);
+                        const key = try proto.parse(Pri, private_blob);
 
                         return .{
                             .allocator = allocator,
                             .ref = private_blob,
-                            .data = sk,
+                            .data = key,
                         };
                     }
                 }
@@ -397,7 +402,7 @@ pub const private = struct {
         };
     }
 
-    pub const Rsa = private.PrivateKey(public.Rsa, struct {
+    pub const Rsa = Sk(pk.Rsa, struct {
         checksum: Checksum,
         kind: []const u8,
         // Public key parts
@@ -412,7 +417,7 @@ pub const private = struct {
         _pad: proto.Padding,
     });
 
-    pub const Ecdsa = private.PrivateKey(public.Ecdsa, struct {
+    pub const Ecdsa = Sk(pk.Ecdsa, struct {
         checksum: u64,
         kind: []const u8,
         // Public parts
@@ -424,7 +429,7 @@ pub const private = struct {
         _pad: proto.Padding,
     });
 
-    pub const Ed25519 = private.PrivateKey(public.Ed25519, struct {
+    pub const Ed25519 = Sk(pk.Ed25519, struct {
         checksum: u64,
         kind: []const u8,
         // Public parts

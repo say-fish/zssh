@@ -18,8 +18,6 @@ pub const Error = error{
     InvalidChecksum,
 };
 
-const Root = @This();
-
 pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len][]const u8 {
     if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
 
