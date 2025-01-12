@@ -51,7 +51,7 @@ const Test = struct {
     mod: ?*std.Build.Module,
     mod_name: ?[]const u8,
 
-    assets: ?*const TestAssets,
+    assets: ?*const TestAssets = null,
 };
 
 fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
@@ -139,6 +139,23 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
+            .assets = &sigs,
+        }) catch @panic("OOM");
+
+        add_test(b, test_step, .{
+            .root_source_file = b.path("src/proto.zig"),
+            .target = target,
+            .optimize = optimize,
+            .mod = mod,
+            .mod_name = "proto",
+        }) catch @panic("OOM");
+
+        add_test(b, test_step, .{
+            .root_source_file = b.path("src/sig.zig"),
+            .target = target,
+            .optimize = optimize,
+            .mod = mod,
+            .mod_name = "sig",
             .assets = &sigs,
         }) catch @panic("OOM");
     }

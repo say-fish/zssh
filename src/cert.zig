@@ -23,6 +23,7 @@ fn MagicString(comptime T: type) type {
         T,
         "-cert-v01@openssh.com",
         proto.rfc4251.parse_string,
+        proto.rfc4251.encoded_size,
     );
 }
 

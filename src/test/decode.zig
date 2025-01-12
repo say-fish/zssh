@@ -10,14 +10,14 @@ test "decode in place" {
 
     std.mem.copyForwards(u8, key, rodata);
 
-    _ = try sshcrypt.pem.PublicKeyDecoder.decode_in_place(
+    _ = try sshcrypt.decoder.pem.PublicKeyDecoder.decode_in_place(
         std.base64.standard.Decoder,
         key,
     );
 }
 
 test "decode with allocator" {
-    const pem = try sshcrypt.pem.PublicKeyDecoder
+    const pem = try sshcrypt.decoder.pem.PublicKeyDecoder
         .init(std.testing.allocator, std.base64.standard.Decoder)
         .decode(@embedFile("rsa-key.pub"));
     defer pem.deinit();

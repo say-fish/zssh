@@ -2,7 +2,7 @@ const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
 
-const pub_key_decoder = sshcrypto.pem.PublicKeyDecoder
+const pub_key_decoder = sshcrypto.decoder.pem.PublicKeyDecoder
     .init(std.testing.allocator, std.base64.standard.Decoder);
 
 test "Rsa public key" {
@@ -29,8 +29,8 @@ test "ed25519 public key" {
     // TODO: Check fields
 }
 
-const key_decoder = sshcrypto.pem.PrivateKeyDecoder
-    .init(std.testing.allocator, sshcrypto.base64.pem.Decoder);
+const key_decoder = sshcrypto.decoder.pem.PrivateKeyDecoder
+    .init(std.testing.allocator, sshcrypto.decoder.base64.pem.Decoder);
 
 test "Rsa private key: get_public_key" {
     const pem = try key_decoder.decode(@embedFile("rsa-key"));

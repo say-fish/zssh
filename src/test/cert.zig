@@ -6,7 +6,7 @@ const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
 const expect_error = std.testing.expectError;
 
-const cert_decoder = sshcrypto.pem.CertificateDecoder
+const cert_decoder = sshcrypto.decoder.pem.CertificateDecoder
     .init(std.testing.allocator, std.base64.standard.Decoder);
 
 test "parse rsa cert" {
@@ -132,9 +132,7 @@ test "extensions iterator" {
 test "extensions to bitflags" {
     const Ext = sshcrypto.cert.Extensions.Tags;
 
-    var pem = try sshcrypto.pem.CertificateDecoder
-        .init(std.testing.allocator, std.base64.standard.Decoder)
-        .decode(@embedFile("rsa-cert.pub"));
+    var pem = try cert_decoder.decode(@embedFile("rsa-cert.pub"));
     defer pem.deinit();
 
     const rsa = try sshcrypto.cert.Rsa.from_pem(&pem.data);

@@ -18,6 +18,8 @@ pub const Error = error{
     InvalidChecksum,
 };
 
+const Root = @This();
+
 pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len][]const u8 {
     if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
 
@@ -45,10 +47,12 @@ pub fn GenericMagicString(
     comptime T: type,
     comptime sufix: []const u8,
     f: anytype,
+    x: anytype,
 ) type {
     return struct {
         // TODO: Assert T is an enum
         // TODO: Assert F is what we want
+        // TODO: assert X is what we want
         value: T,
 
         const Self = @This();
@@ -62,8 +66,14 @@ pub fn GenericMagicString(
         pub inline fn parse(src: []const u8) Error!Cont(Self) {
             const next, const magic = try f(src);
 
+            // Small hack, otherwise zig complains
+            const ref = switch (comptime @typeInfo(@TypeOf(magic))) {
+                .array => &magic,
+                else => magic,
+            };
+
             for (Self.strings, 0..) |s, i|
-                if (std.mem.eql(u8, s, magic))
+                if (std.mem.eql(u8, s, ref))
                     return .{ next, .{ .value = @enumFromInt(i) } };
 
             return Error.InvalidData;
@@ -82,34 +92,50 @@ pub fn GenericMagicString(
 
             return magic;
         }
+
+        pub fn get_encoded_size(self: *const Self) u32 {
+            return @intCast(x(self.as_string()));
+        }
+
+        pub fn serialize(self: *const Self, writer: anytype) !void {
+            const F = @FieldType(
+                @typeInfo(@typeInfo(@TypeOf(f)).@"fn".return_type.?).error_union.payload,
+                "1",
+            );
+
+            try encode(F, writer, self.as_string());
+        }
     };
 }
 
 // Parser continuation
 pub fn Cont(comptime T: type) type {
-    return struct {
-        usize,
-        T,
-    };
+    return struct { usize, T };
 }
 
 pub const rfc4251 = struct {
-    inline fn read_int(comptime T: type, buf: []const u8) Error!T {
+    inline fn read_int(comptime T: type, buf: []const u8) T {
+        return std.mem.readVarInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
+    }
+
+    pub inline fn parse_int(comptime T: type, buf: []const u8) Error!Cont(T) {
         if (buf.len < @sizeOf(T)) {
             @branchHint(.unlikely);
 
             return Error.InvalidData;
         }
 
-        return std.mem.readVarInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
-    }
-
-    pub inline fn parse_int(comptime T: type, buf: []const u8) Error!Cont(T) {
-        return .{ @sizeOf(T), try read_int(T, buf) };
+        return .{ @sizeOf(T), read_int(T, buf) };
     }
 
     pub inline fn parse_string(buf: []const u8) Error!Cont([]const u8) {
-        const size = @sizeOf(u32) + try read_int(u32, buf);
+        if (buf.len < @sizeOf(u32)) {
+            @branchHint(.unlikely);
+
+            return Error.InvalidData;
+        }
+
+        const size = @sizeOf(u32) + read_int(u32, buf);
 
         if (size > buf.len) {
             @branchHint(.unlikely);
@@ -118,6 +144,16 @@ pub const rfc4251 = struct {
         }
 
         return .{ size, buf[@sizeOf(u32)..size] };
+    }
+
+    pub inline fn encoded_size(value: anytype) u32 {
+        return switch (comptime @TypeOf(value)) {
+            u32 => @sizeOf(u32),
+            u64 => @sizeOf(u64),
+            []u8 => @sizeOf(u32) + @as(u32, @intCast(value.len)),
+            []const u8 => @sizeOf(u32) + @as(u32, @intCast(value.len)),
+            else => @panic("TODO:"),
+        };
     }
 };
 
@@ -131,6 +167,10 @@ pub fn read_null_terminated(src: []const u8) Error!Cont([:0]u8) {
     }
 
     return Error.MalformedString;
+}
+
+pub fn null_terminated_encoded_size(src: []const u8) u32 {
+    return @intCast(src.len + 1);
 }
 
 pub const Padding = struct {
@@ -174,6 +214,48 @@ pub fn Literal(comptime L: []const u8) type {
     };
 }
 
+pub inline fn encode_value(writer: anytype, value: anytype) !void {
+    try encode(@TypeOf(value), writer, value);
+}
+
+pub inline fn encode(comptime T: type, writer: anytype, value: anytype) !void {
+    switch (comptime T) {
+        u32 => {
+            _ = try writer.writeInt(u32, value, .big);
+        },
+
+        u64 => {
+            _ = try writer.writeInt(u64, value, .big);
+        },
+
+        []u8, []const u8 => {
+            _ = try writer.writeInt(u32, @intCast(value.len), .big);
+            _ = try writer.writeAll(value);
+        },
+
+        [:0]u8, [:0]const u8 => {
+            _ = try writer.writeAll(value);
+            _ = try writer.writeInt(u8, 0x00, .big);
+        },
+
+        else => switch (comptime @typeInfo(T)) {
+            .@"struct", .@"enum" => value.encode(writer),
+            .array => _ = try writer.writeAll(value),
+            else => @compileError("Cannot encode value of type: " ++ @typeName(T)),
+        },
+    }
+}
+
+pub fn serialize(comptime T: type, writer: anytype, value: T) !void {
+    if (@typeInfo(T) != .@"struct") {
+        @compileError("Expected `struct`, got:" ++ @typeName(T));
+    }
+
+    inline for (std.meta.fields(T)) |f| {
+        try encode(f.type, writer, @field(value, f.name));
+    }
+}
+
 pub inline fn parse(comptime T: type, src: []const u8) Error!T {
     var ret: T = undefined;
 
@@ -192,11 +274,12 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
             else => if (@hasDecl(f.type, "parse"))
                 try f.type.parse(ref)
             else
-                // TODO: Improve this message
-                @compileError("Type does not declare `fn parse([]const u8) Count!type` "),
+                @compileError("Type: " ++ @typeName(f.type) ++ " does not declare `fn parse([]const u8) ...`"),
         };
 
         i += next;
+
+        std.debug.assert(i <= src.len);
 
         @field(ret, f.name) = val;
     }
@@ -204,4 +287,116 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
     std.debug.assert(i == src.len);
 
     return ret;
+}
+
+test "GenericMagicString `get_encoded_size`" {
+    const magic = GenericMagicString(
+        enum { this_is_a_test_with_size_31 },
+        "",
+        rfc4251.parse_string,
+        rfc4251.encoded_size,
+    ){ .value = .this_is_a_test_with_size_31 };
+
+    try std.testing.expectEqual(31, magic.get_encoded_size());
+}
+
+test "GenericMagicString with sufix `get_encoded_size`" {
+    const magic = GenericMagicString(
+        enum { this_is_a_test_with_size_42 },
+        "_with_sufix",
+        rfc4251.parse_string,
+        rfc4251.encoded_size,
+    ){ .value = .this_is_a_test_with_size_42 };
+
+    try std.testing.expectEqual(42, magic.get_encoded_size());
+}
+
+test "GenericMagicString `get_encoded_size` (read_null_terminated)" {
+    const magic = GenericMagicString(
+        enum(u1) { this_is_a_test_with_size_39 },
+        "_with_sufix",
+        read_null_terminated,
+        null_terminated_encoded_size,
+    ){ .value = .this_is_a_test_with_size_39 };
+
+    try std.testing.expectEqual(39, magic.get_encoded_size());
+}
+
+test "encode u32" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+
+    const num: u32 = 10;
+
+    try encode(u32, list.writer(), num);
+    try std.testing.expectEqualSlices(u8, &[_]u8{
+        0x00,
+        0x00,
+        0x00,
+        0x0A,
+    }, list.items);
+}
+
+test "encode u64" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+
+    const num: u64 = 10;
+
+    try encode(u64, list.writer(), num);
+    try std.testing.expectEqualSlices(u8, &[_]u8{
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+        0x0A,
+    }, list.items);
+}
+
+test "encode []const u8 (rfc4251 string)" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+
+    const string: []const u8 = "this is a rfc4251 string";
+
+    try encode([]const u8, list.writer(), string);
+
+    try std.testing.expectEqualStrings(&[_]u8{
+        0x00,
+        0x00,
+        0x00,
+        0x18,
+    } ++ string, list.items);
+}
+
+test "encode [:0]const u8 (null terminated string)" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+
+    const string: [:0]const u8 = "this is a null terminated string";
+
+    try encode([:0]const u8, list.writer(), string);
+
+    try std.testing.expectEqualStrings(string ++ [_]u8{0x00}, list.items);
+}
+
+test "serialize GenericMagicString" {
+    const magic = GenericMagicString(
+        enum { this_is_a_test_with_size_42 },
+        "_with_sufix",
+        rfc4251.parse_string,
+        rfc4251.encoded_size,
+    ){ .value = .this_is_a_test_with_size_42 };
+
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+
+    try magic.serialize(list.writer());
+    try std.testing.expectEqual(
+        .this_is_a_test_with_size_42,
+        (try @TypeOf(magic).from_bytes(list.items)).value,
+    );
 }

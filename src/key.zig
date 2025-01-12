@@ -26,7 +26,12 @@ pub const public = struct {
     };
 
     fn MagicString(comptime T: type) type {
-        return proto.GenericMagicString(T, "", proto.rfc4251.parse_string);
+        return proto.GenericMagicString(
+            T,
+            "",
+            proto.rfc4251.parse_string,
+            proto.rfc4251.encoded_size,
+        );
     }
 
     pub const Rsa = struct {
@@ -161,7 +166,12 @@ pub const private = struct {
     }
 
     fn MagicString(comptime T: type) type {
-        return proto.GenericMagicString(T, "", proto.read_null_terminated);
+        return proto.GenericMagicString(
+            T,
+            "",
+            proto.read_null_terminated,
+            std.mem.len,
+        );
     }
 
     pub fn decrypt_aes_256_ctr(

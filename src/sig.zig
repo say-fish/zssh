@@ -5,7 +5,12 @@ const key = @import("key.zig");
 // TODO: Error
 
 fn MagicString(comptime T: type) type {
-    return proto.GenericMagicString(T, "", proto.rfc4251.parse_string);
+    return proto.GenericMagicString(
+        T,
+        "",
+        proto.rfc4251.parse_string,
+        proto.rfc4251.encoded_size,
+    );
 }
 
 /// The resulting signature is encoded as follows:
@@ -114,17 +119,26 @@ pub const rfc8032 = struct {
     }
 };
 
-pub const sshsig = struct {
+pub const Sshsig = struct {
     fn MagicPreamble(comptime T: type) type {
-        return proto.GenericMagicString(T, "", struct {
-            fn parse_string_fixed(src: []const u8) proto.Error!proto.Cont([]const u8) {
-                if (src.len < 6) {
-                    return proto.Error.MalformedString;
-                }
+        return proto.GenericMagicString(
+            T,
+            "",
+            struct {
+                fn parse_string_fixed(src: []const u8) proto.Error!proto.Cont([6]u8) {
+                    if (src.len < 6) {
+                        return proto.Error.MalformedString;
+                    }
 
-                return .{ 6, src[0..6] };
-            }
-        }.parse_string_fixed);
+                    return .{ 6, src[0..6].* };
+                }
+            }.parse_string_fixed,
+            struct {
+                inline fn six(_: anytype) u32 {
+                    return 6;
+                }
+            }.six,
+        );
     }
 
     /// Magic string, must be "SSHSIG"
@@ -146,14 +160,14 @@ pub const sshsig = struct {
     /// it is not empty.
     reserved: []const u8,
     /// The supported hash algorithms are "sha256" and "sha512".
-    hash_algorithm: HashAlgorithms,
+    hash_algorithm: HashAlgorithm,
     signature: Sig,
 
     const Self = @This();
 
     pub const Magic = MagicPreamble(enum(u1) { SSHSIG });
 
-    pub const HashAlgorithms = MagicString(enum(u1) { sha256, sha512 });
+    pub const HashAlgorithm = MagicString(enum(u1) { sha256, sha512 });
 
     fn from(src: []const u8) !Self {
         return try proto.parse(Self, src);
@@ -178,6 +192,70 @@ pub const sshsig = struct {
             return std.mem.tokenizeSequence(u8, src, "-----");
         }
     };
+
+    pub const Blob = struct {
+        magic: Magic,
+        namespace: []const u8,
+        reserved: []const u8,
+        hash_algorithm: HashAlgorithm,
+        hmsg: []const u8,
+
+        fn from(src: []const u8) !@This() {
+            return try proto.parse(@This(), src);
+        }
+
+        pub inline fn from_bytes(src: []const u8) !@This() {
+            return try @This().from(src);
+        }
+    };
+
+    pub fn Managed(comptime T: type) type {
+        return struct {
+            data: T,
+            allocator: std.mem.Allocator,
+            ref: []u8,
+
+            pub fn deinit(self: *@This()) void {
+                self.allocator.free(self.ref);
+            }
+        };
+    }
+
+    pub fn get_signature_blob(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+        hmsg: []const u8,
+    ) !Managed(Blob) {
+        const size = self.magic.get_encoded_size() +
+            proto.rfc4251.encoded_size(self.namespace) +
+            proto.rfc4251.encoded_size(self.reserved) +
+            self.hash_algorithm.get_encoded_size() +
+            @sizeOf(u32) + hmsg.len;
+
+        var list = std.ArrayList(u8).init(allocator);
+        defer list.deinit();
+
+        try self.magic.serialize(list.writer());
+        try proto.encode_value(list.writer(), self.namespace);
+        try proto.encode_value(list.writer(), self.reserved);
+        try self.hash_algorithm.serialize(list.writer());
+        try proto.encode([]const u8, list.writer(), hmsg);
+
+        const ref = try allocator.alloc(u8, size);
+        errdefer allocator.free(ref);
+
+        @memcpy(ref, list.items);
+
+        return .{
+            .data = try Blob.from_bytes(ref),
+            .allocator = allocator,
+            .ref = ref,
+        };
+    }
+
+    pub fn encoded_size() u32 {
+        return 0;
+    }
 };
 
 pub const Sig = union(enum) {
@@ -221,3 +299,18 @@ pub const Sig = union(enum) {
         };
     }
 };
+
+const decoder = @import("decoder.zig");
+
+const sshsig_decoder = decoder.pem.SshsigDecoder
+    .init(std.testing.allocator, decoder.base64.pem.Decoder);
+
+test "blob" {
+    const pem = try sshsig_decoder.decode(@embedFile("test.file.sig"));
+    defer pem.deinit();
+
+    const sshsig = try Sshsig.from_pem(pem.data);
+
+    var blob = try sshsig.get_signature_blob(std.testing.allocator, &[_]u8{0x00});
+    defer blob.deinit();
+}
