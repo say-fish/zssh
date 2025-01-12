@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const panic = std.debug.panic;
 
@@ -87,6 +88,11 @@ pub fn build(b: *std.Build) void {
 
     const llvm = !(b.option(bool, "nollvm", "Don't use LLVM") orelse false);
 
+    const lld = if (builtin.os.tag == .windows or builtin.os.tag == .macos)
+        false
+    else
+        llvm;
+
     const mod = b.addModule("sshcrypto", .{
         .root_source_file = .{
             .src_path = .{
@@ -112,7 +118,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
-            .use_lld = llvm,
+            .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
@@ -123,7 +129,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
-            .use_lld = llvm,
+            .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
@@ -134,7 +140,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
-            .use_lld = llvm,
+            .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
@@ -143,7 +149,7 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/proto.zig"),
             .target = target,
             .optimize = optimize,
-            .use_lld = llvm,
+            .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
@@ -185,7 +191,7 @@ pub fn build(b: *std.Build) void {
                 b.fmt("perf/{s}.zig", .{@tagName(perf_name)}),
             ),
             .target = target,
-            .use_lld = llvm,
+            .use_lld = lld,
             .use_llvm = llvm,
             .optimize = .ReleaseFast,
         });
