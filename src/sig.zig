@@ -38,11 +38,11 @@ pub const rfc8332 = struct {
         rsa_sha2_512,
     });
 
-    inline fn from(src: []const u8) proto.Error!Self {
+    fn from(src: []const u8) proto.Error!Self {
         return try proto.parse(Self, src);
     }
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+    pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
         const next, const sig = try proto.rfc4251.parse_string(src);
 
         return .{ next, try Self.from(sig) };
@@ -75,7 +75,7 @@ pub const rfc5656 = struct {
             return try proto.parse(Blob, src);
         }
 
-        pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Blob) {
+        pub fn parse(src: []const u8) proto.Error!proto.Cont(Blob) {
             const next, const blob = try proto.rfc4251.parse_string(src);
 
             return .{ next, try Blob.from(blob) };
@@ -93,7 +93,7 @@ pub const rfc5656 = struct {
         return try proto.parse(Self, src);
     }
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+    pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
         const next, const sig = try proto.rfc4251.parse_string(src);
 
         return .{ next, try Self.from(sig) };
@@ -115,7 +115,7 @@ pub const rfc8032 = struct {
         return try proto.parse(Self, src);
     }
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+    pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
         const next, const sig = try proto.rfc4251.parse_string(src);
 
         return .{ next, try Self.from(sig) };
@@ -123,7 +123,7 @@ pub const rfc8032 = struct {
 };
 
 pub const SshSig = struct {
-    inline fn parse_fixed_string(src: []const u8) proto.Error!proto.Cont([6]u8) {
+    fn parse_fixed_string(src: []const u8) proto.Error!proto.Cont([6]u8) {
         if (src.len < 6) {
             return proto.Error.MalformedString;
         }
@@ -131,7 +131,7 @@ pub const SshSig = struct {
         return .{ 6, src[0..6].* };
     }
 
-    inline fn fixed_string_encoded_size(_: anytype) u32 {
+    fn fixed_string_encoded_size(_: anytype) u32 {
         return 6;
     }
 
@@ -178,11 +178,11 @@ pub const SshSig = struct {
         return try proto.parse(Self, src);
     }
 
-    pub inline fn from_bytes(src: []const u8) !Self {
+    pub fn from_bytes(src: []const u8) !Self {
         return try Self.from(src);
     }
 
-    pub inline fn from_pem(pem: Pem) !Self {
+    pub fn from_pem(pem: Pem) !Self {
         return try Self.from(pem.der);
     }
 
@@ -191,7 +191,7 @@ pub const SshSig = struct {
         der: []u8,
         _posfix: proto.Literal("END SSH SIGNATURE"),
 
-        pub inline fn tokenize(
+        pub fn tokenize(
             src: []const u8,
         ) std.mem.TokenIterator(u8, .sequence) {
             return std.mem.tokenizeSequence(u8, src, "-----");
@@ -209,7 +209,7 @@ pub const SshSig = struct {
             return try proto.parse(Blob, src);
         }
 
-        pub inline fn from_bytes(src: []const u8) !Blob {
+        pub fn from_bytes(src: []const u8) !Blob {
             return try Blob.from(src);
         }
     };

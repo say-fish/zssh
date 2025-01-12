@@ -25,7 +25,7 @@ pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len]
 
     comptime var ret: [fields.len][]const u8 = undefined;
 
-    inline for (fields, &ret) |field, *r| {
+    inline for (comptime fields, &ret) |field, *r| {
         const U = [field.name.len]u8;
 
         comptime var name: U = std.mem.zeroes(U);
@@ -57,11 +57,11 @@ pub fn GenericMagicString(
 
         const strings = enum_to_str(T, sufix);
 
-        pub inline fn as_string(self: *const Self) []const u8 {
+        pub fn as_string(self: *const Self) []const u8 {
             return strings[@intFromEnum(self.value)];
         }
 
-        pub inline fn parse(src: []const u8) Error!Cont(Self) {
+        pub fn parse(src: []const u8) Error!Cont(Self) {
             const next, const magic = try f(src);
 
             // Small hack, otherwise zig complains
@@ -144,12 +144,16 @@ pub const rfc4251 = struct {
         return .{ size, buf[@sizeOf(u32)..size] };
     }
 
-    pub inline fn encoded_size(value: anytype) u32 {
+    pub fn encoded_size(value: anytype) u32 {
         return switch (comptime @TypeOf(value)) {
             u32 => @sizeOf(u32),
+
             u64 => @sizeOf(u64),
+
             []u8 => @sizeOf(u32) + @as(u32, @intCast(value.len)),
+
             []const u8 => @sizeOf(u32) + @as(u32, @intCast(value.len)),
+
             else => @panic("TODO:"),
         };
     }
@@ -185,7 +189,7 @@ pub const Padding = struct {
         return true;
     }
 
-    pub inline fn parse(src: []const u8) Error!Cont(Padding) {
+    pub fn parse(src: []const u8) Error!Cont(Padding) {
         return .{ src.len, .{ ._pad = src } };
     }
 };
@@ -202,7 +206,7 @@ pub fn Blob(comptime T: type) type {
 
 pub fn Literal(comptime L: []const u8) type {
     return struct {
-        pub inline fn parse(src: []const u8) Error!void {
+        pub fn parse(src: []const u8) Error!void {
             if (std.mem.eql(u8, src, L)) {
                 return;
             }
@@ -212,11 +216,11 @@ pub fn Literal(comptime L: []const u8) type {
     };
 }
 
-pub inline fn encode_value(writer: anytype, value: anytype) !void {
+pub fn encode_value(writer: anytype, value: anytype) !void {
     try encode(@TypeOf(value), writer, value);
 }
 
-pub inline fn encode(comptime T: type, writer: anytype, value: anytype) !void {
+pub fn encode(comptime T: type, writer: anytype, value: anytype) !void {
     switch (comptime T) {
         u32 => {
             _ = try writer.writeInt(u32, value, .big);
@@ -238,8 +242,12 @@ pub inline fn encode(comptime T: type, writer: anytype, value: anytype) !void {
 
         else => switch (comptime @typeInfo(T)) {
             .@"struct", .@"enum" => value.encode(writer),
+
             .array => _ = try writer.writeAll(value),
-            else => @compileError("Cannot encode value of type: " ++ @typeName(T)),
+
+            else => @compileError(
+                "Cannot encode value of type: " ++ @typeName(T),
+            ),
         },
     }
 }
@@ -249,7 +257,7 @@ pub fn serialize(comptime T: type, writer: anytype, value: T) !void {
         @compileError("Expected `struct`, got:" ++ @typeName(T));
     }
 
-    inline for (std.meta.fields(T)) |f| {
+    inline for (comptime std.meta.fields(T)) |f| {
         try encode(f.type, writer, @field(value, f.name));
     }
 }
@@ -272,7 +280,8 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
             else => if (@hasDecl(f.type, "parse"))
                 try f.type.parse(ref)
             else
-                @compileError("Type: " ++ @typeName(f.type) ++ " does not declare `fn parse([]const u8) ...`"),
+                @compileError("Type: " ++
+                    @typeName(f.type) ++ " does not declare `fn parse([]const u8) ...`"),
         };
 
         i += next;

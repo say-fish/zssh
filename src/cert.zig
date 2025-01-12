@@ -148,7 +148,7 @@ pub const CriticalOptions = struct {
         }.parse_value,
     );
 
-    inline fn is_valid_option(opt: []const u8) ?CriticalOptions.Tags {
+    fn is_valid_option(opt: []const u8) ?CriticalOptions.Tags {
         for (Self.Tags.strings, 0..) |s, i|
             if (std.mem.eql(u8, s, opt))
                 return @enumFromInt(i);
@@ -341,11 +341,11 @@ fn GenericCert(comptime M: type, comptime T: type) type {
             return try proto.parse(Self, src);
         }
 
-        pub inline fn from_pem(pem: *const Pem) Error!Self {
+        pub fn from_pem(pem: *const Pem) Error!Self {
             return try Self.from(pem.der);
         }
 
-        pub inline fn from_bytes(src: []const u8) Error!Self {
+        pub fn from_bytes(src: []const u8) Error!Self {
             return try Self.from(src);
         }
     };

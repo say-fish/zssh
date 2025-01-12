@@ -23,7 +23,7 @@ pub const pk = struct {
         der: []u8,
         comment: proto.Blob([]const u8),
 
-        pub inline fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .any) {
+        pub fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .any) {
             return std.mem.tokenizeAny(u8, src, " ");
         }
     };
@@ -50,11 +50,11 @@ pub const pk = struct {
             return try proto.parse(Self, src);
         }
 
-        pub inline fn from_bytes(src: []const u8) Error!Rsa {
+        pub fn from_bytes(src: []const u8) Error!Rsa {
             return try Self.from(src);
         }
 
-        pub inline fn from_pem(pem: Pem) Error!Rsa {
+        pub fn from_pem(pem: Pem) Error!Rsa {
             // XXX: Check if PEM magic matches what we got from the DER
             return try Self.from(pem.der);
         }
@@ -77,11 +77,11 @@ pub const pk = struct {
             return try proto.parse(Self, src);
         }
 
-        pub inline fn from_bytes(src: []const u8) Error!Ecdsa {
+        pub fn from_bytes(src: []const u8) Error!Ecdsa {
             return try Self.from(src);
         }
 
-        pub inline fn from_pem(pem: Pem) Error!Ecdsa {
+        pub fn from_pem(pem: Pem) Error!Ecdsa {
             // XXX: Check if PEM magic matches what we got from the DER
             return try Self.from(pem.der);
         }
@@ -99,11 +99,11 @@ pub const pk = struct {
             return try proto.parse(Self, src);
         }
 
-        pub inline fn from_bytes(src: []const u8) Error!Ed25519 {
+        pub fn from_bytes(src: []const u8) Error!Ed25519 {
             return try Self.from(src);
         }
 
-        pub inline fn from_pem(pem: Pem) Error!Ed25519 {
+        pub fn from_pem(pem: Pem) Error!Ed25519 {
             // XXX: Check if PEM magic matches what we got from the DER
             return try Self.from(pem.der);
         }
@@ -124,7 +124,7 @@ pub const pk = struct {
             ssh_ed25519,
         });
 
-        pub fn parse(src: []const u8) proto.Error!proto.Cont(Pk) {
+        pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Pk) {
             const next, const key = try proto.rfc4251.parse_string(src);
 
             return .{
@@ -234,7 +234,7 @@ pub const sk = struct {
                 @as(u32, @truncate(value));
         }
 
-        pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
+        pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
             const next, const checksum = try proto.rfc4251.parse_int(u64, src);
 
             // XXX: This is not realy great
@@ -307,7 +307,7 @@ pub const sk = struct {
         der: []u8,
         _posfix: proto.Literal("END OPENSSH PRIVATE KEY"),
 
-        pub inline fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .sequence) {
+        pub fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .sequence) {
             return std.mem.tokenizeSequence(u8, src, "-----");
         }
     };
@@ -392,11 +392,11 @@ pub const sk = struct {
                 return try proto.parse(Self, src);
             }
 
-            pub inline fn from_bytes(src: []const u8) Error!Self {
+            pub fn from_bytes(src: []const u8) Error!Self {
                 return try Self.from(src);
             }
 
-            pub inline fn from_pem(pem: Pem) Error!Self {
+            pub fn from_pem(pem: Pem) Error!Self {
                 return try Self.from(pem.der);
             }
         };

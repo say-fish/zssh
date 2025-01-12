@@ -50,6 +50,9 @@ const Test = struct {
     mod: ?*std.Build.Module = null,
     mod_name: ?[]const u8 = null,
 
+    use_lld: bool = true,
+    use_llvm: bool = true,
+
     assets: ?*const TestAssets = null,
 };
 
@@ -58,6 +61,8 @@ fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
         .root_source_file = t.root_source_file,
         .target = t.target,
         .optimize = t.optimize,
+        .use_llvm = t.use_llvm,
+        .use_lld = t.use_lld,
     });
 
     if (t.mod) |mod|
@@ -79,6 +84,8 @@ fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    const llvm = !(b.option(bool, "nollvm", "Don't use LLVM") orelse false);
 
     const mod = b.addModule("sshcrypto", .{
         .root_source_file = .{
@@ -105,6 +112,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
+            .use_lld = llvm,
+            .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
 
@@ -114,6 +123,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
+            .use_lld = llvm,
+            .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
 
@@ -123,6 +134,8 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .mod = mod,
             .mod_name = "sshcrypto",
+            .use_lld = llvm,
+            .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
 
@@ -130,6 +143,8 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("src/proto.zig"),
             .target = target,
             .optimize = optimize,
+            .use_lld = llvm,
+            .use_llvm = llvm,
             .assets = &assets,
         }) catch @panic("OOM");
     }
@@ -155,11 +170,24 @@ pub fn build(b: *std.Build) void {
 
     const perf_step = b.step("perf", "Perf record");
     {
+        const Names = enum {
+            cert,
+            @"verify-cert",
+            key,
+        };
+
+        const perf_name =
+            b.option(Names, "perf", "Perf to run (default: key)") orelse .key;
+
         const perf_exe = b.addExecutable(.{
-            .name = "cert_perf",
-            .root_source_file = b.path("perf/cert.zig"),
+            .name = "perf",
+            .root_source_file = b.path(
+                b.fmt("perf/{s}.zig", .{@tagName(perf_name)}),
+            ),
             .target = target,
-            .optimize = optimize,
+            .use_lld = llvm,
+            .use_llvm = llvm,
+            .optimize = .ReleaseFast,
         });
 
         perf_exe.root_module.addImport("sshcrypto", mod);
@@ -172,7 +200,8 @@ pub fn build(b: *std.Build) void {
             );
         }
 
-        const run_perf = b.addSystemCommand(&.{ "perf", "record", "-e", PERF_EVENTS });
+        const run_perf =
+            b.addSystemCommand(&.{ "perf", "record", "-e", PERF_EVENTS });
 
         run_perf.has_side_effects = true;
         run_perf.addArtifactArg(perf_exe);
