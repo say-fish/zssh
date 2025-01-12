@@ -1,4 +1,6 @@
 const std = @import("std");
+const builtin = @import("builtin");
+
 const sshcrypto = @import("sshcrypto");
 
 const sshsig_decoder = sshcrypto.decoder.pem.SshsigDecoder
@@ -12,29 +14,32 @@ test "parse SSHSIG" {
 
     try std.testing.expectEqual(1, sshsig.version);
     try std.testing.expect(sshsig.namespace.len != 0);
-    switch (sshsig.publickey) {
-        .ed25519 => |sig| {
-            const signature = std.crypto.sign
-                .Ed25519.Signature.fromBytes(sshsig.signature.ed25519.sm[0..64].*);
-            const pk = try std.crypto.sign
-                .Ed25519.PublicKey.fromBytes(sig.pk[0..32].*);
 
-            var sha = std.crypto.hash.sha2.Sha512.init(.{});
+    if (comptime builtin.os.tag != .windows) {
+        switch (sshsig.publickey) {
+            .ed25519 => |sig| {
+                const signature = std.crypto.sign
+                    .Ed25519.Signature.fromBytes(sshsig.signature.ed25519.sm[0..64].*);
+                const pk = try std.crypto.sign
+                    .Ed25519.PublicKey.fromBytes(sig.pk[0..32].*);
 
-            var hash: [512 / 8]u8 = undefined;
+                var sha = std.crypto.hash.sha2.Sha512.init(.{});
 
-            sha.update(@embedFile("test.file"));
-            sha.final(&hash);
+                var hash: [512 / 8]u8 = undefined;
 
-            var blob = try sshsig.get_signature_blob(
-                std.testing.allocator,
-                &hash,
-            );
-            defer blob.deinit();
+                sha.update(@embedFile("test.file"));
+                sha.final(&hash);
 
-            try signature.verify(blob.ref, pk);
-        },
+                var blob = try sshsig.get_signature_blob(
+                    std.testing.allocator,
+                    &hash,
+                );
+                defer blob.deinit();
 
-        else => return error.InvalidSigType,
+                try signature.verify(blob.ref, pk);
+            },
+
+            else => return error.InvalidSigType,
+        }
     }
 }
