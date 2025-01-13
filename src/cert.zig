@@ -23,7 +23,6 @@ pub const Error = error{
 fn MagicString(comptime T: type) type {
     return proto.GenericMagicString(
         T,
-        "-cert-v01@openssh.com",
         proto.rfc4251.parse_string,
         proto.rfc4251.encoded_size,
     );
@@ -97,21 +96,21 @@ pub const CriticalOptions = struct {
     pub const Tags = enum {
         /// Specifies a command that is executed (replacing any the user specified
         /// on the ssh command-line) whenever this key is used for authentication.
-        force_command,
+        @"force-command",
 
         /// Comma-separated list of source addresses from which this certificate is
         /// accepted for authentication. Addresses are specified in CIDR format
         /// (nn.nn.nn.nn/nn or hhhh::hhhh/nn). If this option is not present, then
         /// certificates may be presented from any source address.
-        source_address,
+        @"source-address",
 
         /// Flag indicating that signatures made with this certificate must assert
         /// FIDO user verification (e.g. PIN or biometric). This option only makes
         /// sense for the U2F/FIDO security key types that support this feature in
         /// their signature formats.
-        verify_required,
+        @"verify-required",
 
-        pub const strings = proto.enum_to_str(Self.Tags, "");
+        pub const strings = proto.enum_to_str(Self.Tags);
 
         pub fn as_string(self: *const Self.Tags) []const u8 {
             return Self.Tag.strings[self.*];
@@ -174,30 +173,30 @@ pub const Extensions = struct {
         /// assert FIDO user presence. This option only makes sense for the
         /// U2F/FIDO security key types that support this feature in their
         /// signature formats.
-        no_touch_required = 0x01 << 0,
+        @"no-touch-required" = 0x01 << 0,
 
         /// Flag indicating that X11 forwarding should be permitted. X11 forwarding
         /// will be refused if this option is absent.
-        permit_X11_forwarding = 0x01 << 1,
+        @"permit-X11-forwarding" = 0x01 << 1,
 
         /// Flag indicating that agent forwarding should be allowed. Agent
         /// forwarding must not be permitted unless this option is present.
-        permit_agent_forwarding = 0x01 << 2,
+        @"permit-agent-forwarding" = 0x01 << 2,
 
         /// Flag indicating that port-forwarding should be allowed. If this option
         /// is not present, then no port forwarding will be allowed.
-        permit_port_forwarding = 0x01 << 3,
+        @"permit-port-forwarding" = 0x01 << 3,
 
         /// Flag indicating that PTY allocation should be permitted. In the absence
         /// of this option PTY allocation will be disabled.
-        permit_pty = 0x01 << 4,
+        @"permit-pty" = 0x01 << 4,
 
         /// Flag indicating that execution of ~/.ssh/rc should be permitted.
         /// Execution of this script will not be permitted if this option is not
         /// present.
-        permit_user_rc = 0x01 << 5,
+        @"permit-user-rc" = 0x01 << 5,
 
-        const strings = proto.enum_to_str(Self.Tags, "");
+        const strings = proto.enum_to_str(Self.Tags);
 
         pub inline fn as_string(self: *const Self.Tags) []const u8 {
             return Self.strings[@intFromEnum(self.*)];
@@ -282,13 +281,13 @@ pub const Cert = union(enum) {
     const Self = @This();
 
     pub const Magic = MagicString(enum {
-        ssh_rsa,
-        ecdsa_sha2_nistp256,
-        ecdsa_sha2_nistp384,
-        ecdsa_sha2_nistp521,
-        ssh_ed25519,
-        rsa_sha2_256,
-        rsa_sha2_512,
+        @"ssh-rsa-cert-v01@openssh.com",
+        @"rsa-sha2-256-cert-v01@openssh.com",
+        @"rsa-sha2-512-cert-v01@openssh.com",
+        @"ecdsa-sha2-nistp256-cert-v01@openssh.com",
+        @"ecdsa-sha2-nistp384-cert-v01@openssh.com",
+        @"ecdsa-sha2-nistp521-cert-v01@openssh.com",
+        @"ssh-ed25519-cert-v01@openssh.com",
     });
 
     // TODO: from bytes...
@@ -297,17 +296,17 @@ pub const Cert = union(enum) {
         const magic = try Magic.from_slice(pem.magic);
 
         return switch (magic) {
-            .ssh_rsa,
-            .rsa_sha2_256,
-            .rsa_sha2_512,
+            .@"ssh-rsa-cert-v01@openssh.com",
+            .@"rsa-sha2-256-cert-v01@openssh.com",
+            .@"rsa-sha2-512-cert-v01@openssh.com",
             => .{ .rsa = try Rsa.from_pem(pem) },
 
-            .ecdsa_sha2_nistp256,
-            .ecdsa_sha2_nistp384,
-            .ecdsa_sha2_nistp521,
+            .@"ecdsa-sha2-nistp256-cert-v01@openssh.com",
+            .@"ecdsa-sha2-nistp384-cert-v01@openssh.com",
+            .@"ecdsa-sha2-nistp521-cert-v01@openssh.com",
             => .{ .ecdsa = try Ecdsa.from_pem(pem) },
 
-            .ssh_ed25519,
+            .@"ssh-ed25519-cert-v01@openssh.com",
             => .{ .ed25519 = try Ed25519.from_pem(pem) },
         };
     }
@@ -351,7 +350,11 @@ fn GenericCert(comptime M: type, comptime T: type) type {
     };
 }
 
-pub const Rsa = GenericCert(MagicString(enum { ssh_rsa }), struct {
+pub const Rsa = GenericCert(MagicString(enum {
+    @"ssh-rsa-cert-v01@openssh.com",
+    @"rsa-sha2-256-cert-v01@openssh.com",
+    @"rsa-sha2-512-cert-v01@openssh.com",
+}), struct {
     e: []const u8,
     n: []const u8,
 
@@ -366,9 +369,9 @@ pub const Rsa = GenericCert(MagicString(enum { ssh_rsa }), struct {
 });
 
 pub const Ecdsa = GenericCert(MagicString(enum {
-    ecdsa_sha2_nistp256,
-    ecdsa_sha2_nistp384,
-    ecdsa_sha2_nistp521,
+    @"ecdsa-sha2-nistp256-cert-v01@openssh.com",
+    @"ecdsa-sha2-nistp384-cert-v01@openssh.com",
+    @"ecdsa-sha2-nistp521-cert-v01@openssh.com",
 }), struct {
     curve: []const u8,
     pk: []const u8,
@@ -383,7 +386,9 @@ pub const Ecdsa = GenericCert(MagicString(enum {
     }
 });
 
-pub const Ed25519 = GenericCert(MagicString(enum { ssh_ed25519 }), struct {
+pub const Ed25519 = GenericCert(MagicString(enum {
+    @"ssh-ed25519-cert-v01@openssh.com",
+}), struct {
     pk: []const u8,
 
     const Self = @This();

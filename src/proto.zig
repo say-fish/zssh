@@ -18,7 +18,7 @@ pub const Error = error{
     InvalidChecksum,
 };
 
-pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len][]const u8 {
+pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
 
     const fields = comptime std.meta.fields(T);
@@ -26,15 +26,7 @@ pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len]
     comptime var ret: [fields.len][]const u8 = undefined;
 
     inline for (comptime fields, &ret) |field, *r| {
-        const U = [field.name.len]u8;
-
-        comptime var name: U = std.mem.zeroes(U);
-
-        inline for (field.name, &name) |c, *n| {
-            n.* = if (c == '_') '-' else c;
-        }
-
-        r.* = name ++ sufix;
+        r.* = field.name;
     }
 
     return ret;
@@ -43,7 +35,6 @@ pub fn enum_to_str(comptime T: type, sufix: []const u8) [std.meta.fields(T).len]
 /// Magic string format used by OpenSSH
 pub fn GenericMagicString(
     comptime T: type,
-    comptime sufix: []const u8,
     f: anytype,
     x: anytype,
 ) type {
@@ -55,7 +46,7 @@ pub fn GenericMagicString(
 
         const Self = @This();
 
-        const strings = enum_to_str(T, sufix);
+        const strings = enum_to_str(T);
 
         pub fn as_string(self: *const Self) []const u8 {
             return strings[@intFromEnum(self.value)];
@@ -70,9 +61,11 @@ pub fn GenericMagicString(
                 else => magic,
             };
 
-            for (Self.strings, 0..) |s, i|
-                if (std.mem.eql(u8, s, ref))
+            for (Self.strings, 0..) |s, i| {
+                if (std.mem.eql(u8, s, ref)) {
                     return .{ next, .{ .value = @enumFromInt(i) } };
+                }
+            }
 
             return Error.InvalidData;
         }
@@ -159,7 +152,7 @@ pub const rfc4251 = struct {
     }
 };
 
-pub fn read_null_terminated(src: []const u8) Error!Cont([:0]u8) {
+pub fn read_null_terminated_str(src: []const u8) Error!Cont([:0]u8) {
     var i: u32 = 0;
 
     while (i != src.len) : (i += 1) {
@@ -171,7 +164,7 @@ pub fn read_null_terminated(src: []const u8) Error!Cont([:0]u8) {
     return Error.MalformedString;
 }
 
-pub fn null_terminated_encoded_size(src: []const u8) u32 {
+pub fn null_terminated_str_encoded_size(src: []const u8) u32 {
     return @intCast(src.len + 1);
 }
 
@@ -299,7 +292,6 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
 test "GenericMagicString `get_encoded_size`" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_31 },
-        "",
         rfc4251.parse_string,
         rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_31 };
@@ -307,26 +299,14 @@ test "GenericMagicString `get_encoded_size`" {
     try std.testing.expectEqual(31, magic.get_encoded_size());
 }
 
-test "GenericMagicString with sufix `get_encoded_size`" {
-    const magic = GenericMagicString(
-        enum { this_is_a_test_with_size_42 },
-        "_with_sufix",
-        rfc4251.parse_string,
-        rfc4251.encoded_size,
-    ){ .value = .this_is_a_test_with_size_42 };
-
-    try std.testing.expectEqual(42, magic.get_encoded_size());
-}
-
 test "GenericMagicString `get_encoded_size` (read_null_terminated)" {
     const magic = GenericMagicString(
-        enum(u1) { this_is_a_test_with_size_39 },
-        "_with_sufix",
-        read_null_terminated,
-        null_terminated_encoded_size,
-    ){ .value = .this_is_a_test_with_size_39 };
+        enum { this_is_a_test_with_size_28 },
+        read_null_terminated_str,
+        null_terminated_str_encoded_size,
+    ){ .value = .this_is_a_test_with_size_28 };
 
-    try std.testing.expectEqual(39, magic.get_encoded_size());
+    try std.testing.expectEqual(28, magic.get_encoded_size());
 }
 
 test "encode u32" {
@@ -393,7 +373,6 @@ test "encode [:0]const u8 (null terminated string)" {
 test "serialize GenericMagicString" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_42 },
-        "_with_sufix",
         rfc4251.parse_string,
         rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_42 };
@@ -405,5 +384,24 @@ test "serialize GenericMagicString" {
     try std.testing.expectEqual(
         .this_is_a_test_with_size_42,
         (try @TypeOf(magic).from_bytes(list.items)).value,
+    );
+}
+
+test "`enum_to_str`" {
+    const Enum = enum {
+        foo,
+        bar,
+        baz,
+        @"this-is-a-test-string",
+    };
+
+    const strings = enum_to_str(Enum);
+
+    try std.testing.expectEqualStrings("foo", strings[@intFromEnum(Enum.foo)]);
+    try std.testing.expectEqualStrings("bar", strings[@intFromEnum(Enum.bar)]);
+    try std.testing.expectEqualStrings("baz", strings[@intFromEnum(Enum.baz)]);
+    try std.testing.expectEqualStrings(
+        "this-is-a-test-string",
+        strings[@intFromEnum(Enum.@"this-is-a-test-string")],
     );
 }

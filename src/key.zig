@@ -31,7 +31,6 @@ pub const pk = struct {
     fn MagicString(comptime T: type) type {
         return proto.GenericMagicString(
             T,
-            "",
             proto.rfc4251.parse_string,
             proto.rfc4251.encoded_size,
         );
@@ -44,7 +43,7 @@ pub const pk = struct {
 
         const Self = @This();
 
-        const Magic = MagicString(enum(u1) { ssh_rsa });
+        const Magic = MagicString(enum { @"ssh-rsa" });
 
         fn from(src: []const u8) Error!Rsa {
             return try proto.parse(Self, src);
@@ -68,9 +67,9 @@ pub const pk = struct {
         const Self = @This();
 
         const Magic = MagicString(enum {
-            ecdsa_sha2_nistp256,
-            ecdsa_sha2_nistp384,
-            ecdsa_sha2_nistp521,
+            @"ecdsa-sha2-nistp256",
+            @"ecdsa-sha2-nistp384",
+            @"ecdsa-sha2-nistp521",
         });
 
         fn from(src: []const u8) Error!Ecdsa {
@@ -82,7 +81,6 @@ pub const pk = struct {
         }
 
         pub fn from_pem(pem: Pem) Error!Ecdsa {
-            // XXX: Check if PEM magic matches what we got from the DER
             return try Self.from(pem.der);
         }
     };
@@ -93,7 +91,7 @@ pub const pk = struct {
 
         const Self = @This();
 
-        pub const Magic = MagicString(enum(u1) { ssh_ed25519 });
+        pub const Magic = MagicString(enum { @"ssh-ed25519" });
 
         fn from(src: []const u8) Error!Ed25519 {
             return try proto.parse(Self, src);
@@ -104,7 +102,6 @@ pub const pk = struct {
         }
 
         pub fn from_pem(pem: Pem) Error!Ed25519 {
-            // XXX: Check if PEM magic matches what we got from the DER
             return try Self.from(pem.der);
         }
     };
@@ -117,35 +114,32 @@ pub const pk = struct {
         const Self = @This();
 
         pub const Magic = MagicString(enum {
-            ssh_rsa,
-            ecdsa_sha2_nistp256,
-            ecdsa_sha2_nistp384,
-            ecdsa_sha2_nistp521,
-            ssh_ed25519,
+            @"ssh-rsa",
+            @"ecdsa-sha2-nistp256",
+            @"ecdsa-sha2-nistp384",
+            @"ecdsa-sha2-nistp521",
+            @"ssh-ed25519",
         });
 
         pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Pk) {
             const next, const key = try proto.rfc4251.parse_string(src);
 
-            return .{
-                next,
-                Self.from_bytes(key) catch return Error.InvalidData,
-            };
+            return .{ next, Self.from_bytes(key) catch return Error.InvalidData };
         }
 
         pub fn from_bytes(src: []const u8) !Self {
             _, const magic = try proto.rfc4251.parse_string(src);
 
             return switch (try Magic.from_slice(magic)) {
-                .ssh_rsa,
+                .@"ssh-rsa",
                 => .{ .rsa = try Rsa.from_bytes(src) },
 
-                .ecdsa_sha2_nistp256,
-                .ecdsa_sha2_nistp384,
-                .ecdsa_sha2_nistp521,
+                .@"ecdsa-sha2-nistp256",
+                .@"ecdsa-sha2-nistp384",
+                .@"ecdsa-sha2-nistp521",
                 => .{ .ecdsa = try Ecdsa.from_bytes(src) },
 
-                .ssh_ed25519,
+                .@"ssh-ed25519",
                 => .{ .ed25519 = try Ed25519.from_bytes(src) },
             };
         }
@@ -173,8 +167,7 @@ pub const sk = struct {
     fn MagicString(comptime T: type) type {
         return proto.GenericMagicString(
             T,
-            "",
-            proto.read_null_terminated,
+            proto.read_null_terminated_str,
             std.mem.len,
         );
     }
@@ -342,7 +335,7 @@ pub const sk = struct {
 
             const Self = @This();
 
-            pub const Magic = MagicString(enum(u1) { openssh_key_v1 });
+            pub const Magic = MagicString(enum { @"openssh-key-v1" });
 
             /// Returns `true` if the `private_key_blob` is encrypted, i.e.,
             /// cipher.name != "none"

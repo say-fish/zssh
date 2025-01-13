@@ -16,7 +16,7 @@ test "parse rsa cert" {
 
     switch (try cert.Cert.from_pem(&pem.data)) {
         .rsa => |c| {
-            try expect_equal(c.magic.value, .ssh_rsa);
+            try expect_equal(c.magic.value, .@"ssh-rsa-cert-v01@openssh.com");
             try expect_equal(c.serial, 2);
             try expect_equal(c.kind, .user);
             try expect(std.mem.eql(u8, c.key_id, "abc"));
@@ -52,7 +52,10 @@ test "parse ecdsa cert" {
 
     switch (try cert.Cert.from_pem(&pem.data)) {
         .ecdsa => |c| {
-            try expect_equal(c.magic.value, .ecdsa_sha2_nistp256);
+            try expect_equal(
+                .@"ecdsa-sha2-nistp256-cert-v01@openssh.com",
+                c.magic.value,
+            );
             try expect_equal(c.serial, 2);
             try expect_equal(c.kind, .user);
             try expect(std.mem.eql(u8, c.key_id, "abc"));
@@ -74,7 +77,10 @@ test "parse ed25519 cert" {
 
     switch (try cert.Cert.from_pem(&pem.data)) {
         .ed25519 => |c| {
-            try expect_equal(c.magic.value, .ssh_ed25519);
+            try expect_equal(
+                c.magic.value,
+                .@"ssh-ed25519-cert-v01@openssh.com",
+            );
             try expect_equal(c.serial, 2);
             try expect_equal(c.kind, .user);
 
@@ -140,11 +146,11 @@ test "extensions to bitflags" {
 
     try expect_equal(
         try rsa.extensions.to_bitflags(),
-        @intFromEnum(Ext.permit_agent_forwarding) |
-            @intFromEnum(Ext.permit_X11_forwarding) |
-            @intFromEnum(Ext.permit_user_rc) |
-            @intFromEnum(Ext.permit_port_forwarding) |
-            @intFromEnum(Ext.permit_pty),
+        @intFromEnum(Ext.@"permit-agent-forwarding") |
+            @intFromEnum(Ext.@"permit-X11-forwarding") |
+            @intFromEnum(Ext.@"permit-user-rc") |
+            @intFromEnum(Ext.@"permit-port-forwarding") |
+            @intFromEnum(Ext.@"permit-pty"),
     );
 }
 
@@ -170,7 +176,7 @@ test "multiple valid principals iterator" {
 test "critical options iterator" {
     // Reference
     const critical_options = [_]cert.CriticalOption{.{
-        .kind = .force_command,
+        .kind = .@"force-command",
         .value = "ls -la",
     }};
 
@@ -195,11 +201,11 @@ test "multiple critical options iterator" {
     // Reference
     const critical_options = [_]cert.CriticalOption{
         .{
-            .kind = .force_command,
+            .kind = .@"force-command",
             .value = "ls -la",
         },
         .{
-            .kind = .source_address,
+            .kind = .@"source-address",
             .value = "198.51.100.0/24,203.0.113.0/26",
         },
     };

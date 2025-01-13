@@ -10,7 +10,6 @@ const proto = @import("proto.zig");
 fn MagicString(comptime T: type) type {
     return proto.GenericMagicString(
         T,
-        "",
         proto.rfc4251.parse_string,
         proto.rfc4251.encoded_size,
     );
@@ -34,8 +33,8 @@ pub const rfc8332 = struct {
     const Self = @This();
 
     const Magic = MagicString(enum(u1) {
-        rsa_sha2_256,
-        rsa_sha2_512,
+        @"rsa-sha2-256",
+        @"rsa-sha2-512",
     });
 
     fn from(src: []const u8) proto.Error!Self {
@@ -85,8 +84,8 @@ pub const rfc5656 = struct {
     const Self = @This();
 
     const Magic = MagicString(enum {
-        ecdsa_sha2_nistp256,
-        ecdsa_sha2_nistp512,
+        @"ecdsa-sha2-nistp256",
+        @"ecdsa-sha2-nistp512",
     });
 
     fn from(src: []const u8) proto.Error!Self {
@@ -109,7 +108,7 @@ pub const rfc8032 = struct {
 
     const Self = @This();
 
-    pub const Magic = MagicString(enum(u1) { ssh_ed25519 });
+    pub const Magic = MagicString(enum(u1) { @"ssh-ed25519" });
 
     fn from(src: []const u8) proto.Error!Self {
         return try proto.parse(Self, src);
@@ -138,7 +137,6 @@ pub const SshSig = struct {
     fn MagicPreamble(comptime T: type) type {
         return proto.GenericMagicString(
             T,
-            "",
             parse_fixed_string,
             fixed_string_encoded_size,
         );
@@ -271,11 +269,11 @@ pub const Sig = union(enum) {
     const Self = @This();
 
     const Magic = MagicString(enum {
-        rsa_sha2_256,
-        rsa_sha2_512,
-        ecdsa_sha2_nistp256,
-        ecdsa_sha2_nistp512,
-        ssh_ed25519,
+        @"rsa-sha2-256",
+        @"rsa-sha2-512",
+        @"ecdsa-sha2-nistp256",
+        @"ecdsa-sha2-nistp512",
+        @"ssh-ed25519",
     });
 
     pub fn parse(src: []const u8) proto.Error!proto.Cont(Sig) {
@@ -291,15 +289,15 @@ pub const Sig = union(enum) {
         _, const magic = try proto.rfc4251.parse_string(src);
 
         return switch (try Magic.from_slice(magic)) {
-            .rsa_sha2_256,
-            .rsa_sha2_512,
+            .@"rsa-sha2-256",
+            .@"rsa-sha2-512",
             => return .{ .rsa = try rfc8332.from(src) },
 
-            .ecdsa_sha2_nistp256,
-            .ecdsa_sha2_nistp512,
+            .@"ecdsa-sha2-nistp256",
+            .@"ecdsa-sha2-nistp512",
             => return .{ .ecdsa = try rfc5656.from(src) },
 
-            .ssh_ed25519,
+            .@"ssh-ed25519",
             => return .{ .ed25519 = try rfc8032.from(src) },
         };
     }
