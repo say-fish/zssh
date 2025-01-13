@@ -176,11 +176,7 @@ pub fn build(b: *std.Build) void {
 
     const perf_step = b.step("perf", "Perf record");
     {
-        const Names = enum {
-            cert,
-            @"verify-cert",
-            key,
-        };
+        const Names = enum { @"verify-cert", cert, key, sig };
 
         const perf_name =
             b.option(Names, "perf", "Perf to run (default: key)") orelse .key;
