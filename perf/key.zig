@@ -4,7 +4,7 @@ const sshcrypto = @import("sshcrypto");
 
 const sk = sshcrypto.key.sk;
 
-const MAX_RUNS: usize = 0x01 << 16;
+const MAX_RUNS: usize = 0x01 << 26;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -18,12 +18,16 @@ pub fn main() !void {
         .decode(@embedFile("ed25519-key"));
     defer pem.deinit();
 
+    var buf = std.mem.zeroes([2048]u8);
+
+    var fixed_allocator = std.heap.FixedBufferAllocator.init(&buf);
+
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
         const key = try sk.Ed25519.from_bytes(pem.data.der);
 
-        var skey = try key.get_private_key(allocator, null);
+        var skey = try key.get_private_key(fixed_allocator.allocator(), null);
 
         std.mem.doNotOptimizeAway(skey);
 
