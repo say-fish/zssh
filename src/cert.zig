@@ -94,20 +94,22 @@ pub const CriticalOptions = struct {
     const Self = @This();
 
     pub const Tags = enum {
-        /// Specifies a command that is executed (replacing any the user specified
-        /// on the ssh command-line) whenever this key is used for authentication.
+        /// Specifies a command that is executed (replacing any the user
+        /// specified on the ssh command-line) whenever this key is used for
+        /// authentication.
         @"force-command",
 
-        /// Comma-separated list of source addresses from which this certificate is
-        /// accepted for authentication. Addresses are specified in CIDR format
-        /// (nn.nn.nn.nn/nn or hhhh::hhhh/nn). If this option is not present, then
-        /// certificates may be presented from any source address.
+        /// Comma-separated list of source addresses from which this
+        /// certificate is accepted for authentication. Addresses are specified
+        /// in CIDR format (nn.nn.nn.nn/nn or hhhh::hhhh/nn). If this option is
+        /// not present, then certificates may be presented from any source
+        /// address.
         @"source-address",
 
-        /// Flag indicating that signatures made with this certificate must assert
-        /// FIDO user verification (e.g. PIN or biometric). This option only makes
-        /// sense for the U2F/FIDO security key types that support this feature in
-        /// their signature formats.
+        /// Flag indicating that signatures made with this certificate must
+        /// assert FIDO user verification (e.g. PIN or biometric). This option
+        /// only makes sense for the U2F/FIDO security key types that support
+        /// this feature in their signature formats.
         @"verify-required",
 
         pub const strings = proto.enum_to_str(Self.Tags);
@@ -175,25 +177,25 @@ pub const Extensions = struct {
         /// signature formats.
         @"no-touch-required" = 0x01 << 0,
 
-        /// Flag indicating that X11 forwarding should be permitted. X11 forwarding
-        /// will be refused if this option is absent.
+        /// Flag indicating that X11 forwarding should be permitted. X11
+        /// forwarding will be refused if this option is absent.
         @"permit-X11-forwarding" = 0x01 << 1,
 
         /// Flag indicating that agent forwarding should be allowed. Agent
         /// forwarding must not be permitted unless this option is present.
         @"permit-agent-forwarding" = 0x01 << 2,
 
-        /// Flag indicating that port-forwarding should be allowed. If this option
-        /// is not present, then no port forwarding will be allowed.
+        /// Flag indicating that port-forwarding should be allowed. If this
+        /// option is not present, then no port forwarding will be allowed.
         @"permit-port-forwarding" = 0x01 << 3,
 
-        /// Flag indicating that PTY allocation should be permitted. In the absence
-        /// of this option PTY allocation will be disabled.
+        /// Flag indicating that PTY allocation should be permitted. In the
+        /// absence of this option PTY allocation will be disabled.
         @"permit-pty" = 0x01 << 4,
 
         /// Flag indicating that execution of ~/.ssh/rc should be permitted.
-        /// Execution of this script will not be permitted if this option is not
-        /// present.
+        /// Execution of this script will not be permitted if this option is
+        /// not present.
         @"permit-user-rc" = 0x01 << 5,
 
         const strings = proto.enum_to_str(Self.Tags);

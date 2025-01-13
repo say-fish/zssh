@@ -32,7 +32,13 @@ pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     return ret;
 }
 
-/// Magic string format used by OpenSSH
+/// Magic string of format T used by OpenSSH. Encoding is given by the return
+/// type of f.
+///
+/// * T must be an `enum`, where each enumeration corresponds to **VALID**
+///   magic string for this given type.
+///
+/// * f must have this signature: `fn f([]const u8) Error!Cont(T)`.
 pub fn GenericMagicString(
     comptime T: type,
     f: anytype,
@@ -99,7 +105,7 @@ pub fn GenericMagicString(
     };
 }
 
-// Parser continuation
+/// Parser continuation
 pub fn Cont(comptime T: type) type {
     return struct { usize, T };
 }
@@ -109,6 +115,7 @@ pub const rfc4251 = struct {
         return std.mem.readVarInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
     }
 
+    /// Parse a RFC-4251 encoded int
     pub inline fn parse_int(comptime T: type, buf: []const u8) Error!Cont(T) {
         if (buf.len < @sizeOf(T)) {
             @branchHint(.unlikely);
@@ -119,6 +126,10 @@ pub const rfc4251 = struct {
         return .{ @sizeOf(T), read_int(T, buf) };
     }
 
+    /// Parse a RFC-4251 encoded string:
+    ///  +-----------+------------------+
+    ///  | len (u32) | content (u8) ... |
+    ///  +-----------+------------------+
     pub inline fn parse_string(buf: []const u8) Error!Cont([]const u8) {
         if (buf.len < @sizeOf(u32)) {
             @branchHint(.unlikely);
@@ -137,22 +148,22 @@ pub const rfc4251 = struct {
         return .{ size, buf[@sizeOf(u32)..size] };
     }
 
+    /// Returns the encoded size of a given value, the size is based on the
+    /// `type` as per RFC-4251
     pub fn encoded_size(value: anytype) u32 {
         return switch (comptime @TypeOf(value)) {
-            u32 => @sizeOf(u32),
+            u32, u64 => |T| @sizeOf(T),
 
-            u64 => @sizeOf(u64),
+            []u8, []const u8 => @sizeOf(u32) + @as(u32, @intCast(value.len)),
 
-            []u8 => @sizeOf(u32) + @as(u32, @intCast(value.len)),
-
-            []const u8 => @sizeOf(u32) + @as(u32, @intCast(value.len)),
-
-            else => @panic("TODO:"),
+            else => |T| @compileError(
+                "Encoded size for type: " ++ @typeName(T) ++ "is not supported",
+            ),
         };
     }
 };
 
-pub fn read_null_terminated_str(src: []const u8) Error!Cont([:0]u8) {
+pub fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]u8) {
     var i: u32 = 0;
 
     while (i != src.len) : (i += 1) {
@@ -215,13 +226,7 @@ pub fn encode_value(writer: anytype, value: anytype) !void {
 
 pub fn encode(comptime T: type, writer: anytype, value: anytype) !void {
     switch (comptime T) {
-        u32 => {
-            _ = try writer.writeInt(u32, value, .big);
-        },
-
-        u64 => {
-            _ = try writer.writeInt(u64, value, .big);
-        },
+        u32, u64 => _ = try writer.writeInt(T, value, .big),
 
         []u8, []const u8 => {
             _ = try writer.writeInt(u32, @intCast(value.len), .big);
@@ -236,6 +241,7 @@ pub fn encode(comptime T: type, writer: anytype, value: anytype) !void {
         else => switch (comptime @typeInfo(T)) {
             .@"struct", .@"enum" => value.encode(writer),
 
+            // This is a special case for fixed size encoded strings
             .array => _ = try writer.writeAll(value),
 
             else => @compileError(
@@ -289,6 +295,9 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
     return ret;
 }
 
+const expect_equal = std.testing.expectEqual;
+const expect_equal_strings = std.testing.expectEqualStrings;
+
 test "GenericMagicString `get_encoded_size`" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_31 },
@@ -296,17 +305,17 @@ test "GenericMagicString `get_encoded_size`" {
         rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_31 };
 
-    try std.testing.expectEqual(31, magic.get_encoded_size());
+    try expect_equal(31, magic.get_encoded_size());
 }
 
 test "GenericMagicString `get_encoded_size` (read_null_terminated)" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_28 },
-        read_null_terminated_str,
+        parse_null_terminated_str,
         null_terminated_str_encoded_size,
     ){ .value = .this_is_a_test_with_size_28 };
 
-    try std.testing.expectEqual(28, magic.get_encoded_size());
+    try expect_equal(28, magic.get_encoded_size());
 }
 
 test "encode u32" {
@@ -316,12 +325,7 @@ test "encode u32" {
     const num: u32 = 10;
 
     try encode(u32, list.writer(), num);
-    try std.testing.expectEqualSlices(u8, &[_]u8{
-        0x00,
-        0x00,
-        0x00,
-        0x0A,
-    }, list.items);
+    try expect_equal_strings(&[_]u8{ 0x00, 0x00, 0x00, 0x0A }, list.items);
 }
 
 test "encode u64" {
@@ -331,16 +335,10 @@ test "encode u64" {
     const num: u64 = 10;
 
     try encode(u64, list.writer(), num);
-    try std.testing.expectEqualSlices(u8, &[_]u8{
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-        0x0A,
-    }, list.items);
+    try expect_equal_strings(
+        &[_]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A },
+        list.items,
+    );
 }
 
 test "encode []const u8 (rfc4251 string)" {
@@ -351,12 +349,10 @@ test "encode []const u8 (rfc4251 string)" {
 
     try encode([]const u8, list.writer(), string);
 
-    try std.testing.expectEqualStrings(&[_]u8{
-        0x00,
-        0x00,
-        0x00,
-        0x18,
-    } ++ string, list.items);
+    try expect_equal_strings(
+        &[_]u8{ 0x00, 0x00, 0x00, 0x18 } ++ string,
+        list.items,
+    );
 }
 
 test "encode [:0]const u8 (null terminated string)" {
@@ -367,7 +363,18 @@ test "encode [:0]const u8 (null terminated string)" {
 
     try encode([:0]const u8, list.writer(), string);
 
-    try std.testing.expectEqualStrings(string ++ [_]u8{0x00}, list.items);
+    try expect_equal_strings(string ++ [_]u8{0x00}, list.items);
+}
+
+test "encode [6]u8 (fixed size string)" {
+    var list = std.ArrayList(u8).init(std.testing.allocator);
+    defer list.deinit();
+
+    const string = [6]u8{ 'S', 'S', 'H', 'S', 'I', 'G' };
+
+    try encode([6]u8, list.writer(), &string);
+
+    try expect_equal_strings(&string, list.items);
 }
 
 test "serialize GenericMagicString" {
@@ -381,7 +388,7 @@ test "serialize GenericMagicString" {
     defer list.deinit();
 
     try magic.serialize(list.writer());
-    try std.testing.expectEqual(
+    try expect_equal(
         .this_is_a_test_with_size_42,
         (try @TypeOf(magic).from_bytes(list.items)).value,
     );
@@ -397,10 +404,10 @@ test "`enum_to_str`" {
 
     const strings = enum_to_str(Enum);
 
-    try std.testing.expectEqualStrings("foo", strings[@intFromEnum(Enum.foo)]);
-    try std.testing.expectEqualStrings("bar", strings[@intFromEnum(Enum.bar)]);
-    try std.testing.expectEqualStrings("baz", strings[@intFromEnum(Enum.baz)]);
-    try std.testing.expectEqualStrings(
+    try expect_equal_strings("foo", strings[@intFromEnum(Enum.foo)]);
+    try expect_equal_strings("bar", strings[@intFromEnum(Enum.bar)]);
+    try expect_equal_strings("baz", strings[@intFromEnum(Enum.baz)]);
+    try expect_equal_strings(
         "this-is-a-test-string",
         strings[@intFromEnum(Enum.@"this-is-a-test-string")],
     );

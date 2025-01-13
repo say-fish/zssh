@@ -167,7 +167,7 @@ pub const sk = struct {
     fn MagicString(comptime T: type) type {
         return proto.GenericMagicString(
             T,
-            proto.read_null_terminated_str,
+            proto.parse_null_terminated_str,
             std.mem.len,
         );
     }
