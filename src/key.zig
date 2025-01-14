@@ -57,6 +57,10 @@ pub const pk = struct {
             // XXX: Check if PEM magic matches what we got from the DER
             return try Self.from(pem.der);
         }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return proto.struct_encoded_size(self);
+        }
     };
 
     pub const Ecdsa = struct {
@@ -83,6 +87,10 @@ pub const pk = struct {
         pub fn from_pem(pem: Pem) Error!Ecdsa {
             return try Self.from(pem.der);
         }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return proto.struct_encoded_size(self);
+        }
     };
 
     pub const Ed25519 = struct {
@@ -103,6 +111,10 @@ pub const pk = struct {
 
         pub fn from_pem(pem: Pem) Error!Ed25519 {
             return try Self.from(pem.der);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return proto.struct_encoded_size(self);
         }
     };
 
@@ -141,6 +153,16 @@ pub const pk = struct {
 
                 .@"ssh-ed25519",
                 => .{ .ed25519 = try Ed25519.from_bytes(src) },
+            };
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return switch (self.*) {
+                .rsa => |value| proto.encoded_size(value),
+
+                .ecdsa => |value| proto.encoded_size(value),
+
+                .ed25519 => |value| proto.encoded_size(value),
             };
         }
     };
@@ -201,7 +223,7 @@ pub const sk = struct {
             out,
             private_key_blob,
             keyiv[KEYLEN..keyiv.len].*,
-            std.builtin.Endian.big,
+            .big,
         );
 
         return out;

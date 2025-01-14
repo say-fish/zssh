@@ -229,10 +229,10 @@ pub const SshSig = struct {
         allocator: std.mem.Allocator,
         hmsg: []const u8,
     ) !Managed(Blob) {
-        const size = self.magic.get_encoded_size() +
+        const size = self.magic.encoded_size() +
             proto.rfc4251.encoded_size(self.namespace) +
             proto.rfc4251.encoded_size(self.reserved) +
-            self.hash_algorithm.get_encoded_size() +
+            self.hash_algorithm.encoded_size() +
             @sizeOf(u32) + hmsg.len;
 
         var list = std.ArrayList(u8).init(allocator);
@@ -257,7 +257,7 @@ pub const SshSig = struct {
     }
 
     pub fn encoded_size() u32 {
-        return 0;
+        @panic("TODO");
     }
 };
 

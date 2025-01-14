@@ -83,6 +83,18 @@ test "parse ed25519 cert" {
     }
 }
 
+const Ed25519 = sshcrypto.cert.Ed25519;
+const enconded_sig_size = sshcrypto.cert.Ed25519.enconded_sig_size;
+
+test enconded_sig_size {
+    var pem = try cert_decoder.decode(@embedFile("ed25519-cert.pub"));
+    defer pem.deinit();
+
+    const cert = try Ed25519.from_pem(&pem.data);
+
+    try expect_equal(352, cert.enconded_sig_size());
+}
+
 test "verify ed25519 cert" {
     var pem = try cert_decoder.decode(@embedFile("ed25519-cert.pub"));
     defer pem.deinit();
@@ -98,8 +110,7 @@ test "verify ed25519 cert" {
             const pk = try PublicKey.fromBytes(
                 cert.signature_key.ed25519.pk[0..32].*,
             );
-            // FIXME:
-            try signature.verify(pem.data.der[0 .. pem.data.der.len - 87], pk);
+            try signature.verify(pem.data.der[0..cert.enconded_sig_size()], pk);
         },
         else => return error.wrong_certificate,
     }

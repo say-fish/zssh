@@ -90,7 +90,7 @@ pub fn GenericMagicString(
             return magic;
         }
 
-        pub fn get_encoded_size(self: *const Self) u32 {
+        pub fn encoded_size(self: *const Self) u32 {
             return @intCast(x(self.as_string()));
         }
 
@@ -251,6 +251,41 @@ pub fn encode(comptime T: type, writer: anytype, value: anytype) !void {
     }
 }
 
+pub fn encoded_size(value: anytype) u32 {
+    return switch (@TypeOf(value)) {
+        u32, u64, []u8, []const u8 => rfc4251.encoded_size(value),
+
+        [:0]u8, [:0]const u8 => null_terminated_str_encoded_size(value),
+
+        else => |Type| switch (@typeInfo(Type)) {
+            .@"enum",
+            .@"struct",
+            .@"union",
+            => if (@hasDecl(Type, "encoded_size"))
+                value.encoded_size()
+            else
+                @compileError(@typeName(Type) ++
+                    " does not declare `encoded_size`"),
+
+            .array => comptime value.len,
+
+            else => @compileError(
+                "Cannot get encoded size of type: " ++ @typeName(Type),
+            ),
+        },
+    };
+}
+
+pub fn struct_encoded_size(self: anytype) u32 {
+    var ret: u32 = 0;
+
+    inline for (comptime std.meta.fields(@TypeOf(self.*))) |field| {
+        ret += encoded_size(@field(self.*, field.name));
+    }
+
+    return ret;
+}
+
 pub fn serialize(comptime T: type, writer: anytype, value: T) !void {
     if (@typeInfo(T) != .@"struct") {
         @compileError("Expected `struct`, got:" ++ @typeName(T));
@@ -298,24 +333,24 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
 
-test "GenericMagicString `get_encoded_size`" {
+test "GenericMagicString `encoded_size`" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_31 },
         rfc4251.parse_string,
         rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_31 };
 
-    try expect_equal(31, magic.get_encoded_size());
+    try expect_equal(31, magic.encoded_size());
 }
 
-test "GenericMagicString `get_encoded_size` (read_null_terminated)" {
+test "GenericMagicString `encoded_size` (read_null_terminated)" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_28 },
         parse_null_terminated_str,
         null_terminated_str_encoded_size,
     ){ .value = .this_is_a_test_with_size_28 };
 
-    try expect_equal(28, magic.get_encoded_size());
+    try expect_equal(28, magic.encoded_size());
 }
 
 test "encode u32" {

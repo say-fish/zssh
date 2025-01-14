@@ -79,10 +79,16 @@ pub const CertType = enum(u2) {
     user = 1,
     host = 2,
 
+    const Self = @This();
+
     pub inline fn parse(src: []const u8) proto.Error!proto.Cont(CertType) {
         const next, const val = try proto.rfc4251.parse_int(u32, src);
 
         return .{ next, @enumFromInt(val) };
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return proto.encoded_size(@as(u32, @intFromEnum(self.*)));
     }
 };
 
@@ -123,6 +129,10 @@ pub const CriticalOptions = struct {
         const next, const ref = try proto.rfc4251.parse_string(buf);
 
         return .{ next, .{ .ref = ref } };
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return proto.encoded_size(self.ref);
     }
 
     pub fn iter(self: *const Self) Self.Iterator {
@@ -211,6 +221,10 @@ pub const Extensions = struct {
         return .{ next, .{ .ref = ref } };
     }
 
+    pub fn encoded_size(self: *const Self) u32 {
+        return proto.encoded_size(self.ref);
+    }
+
     pub fn iter(self: *const Self) Self.Iterator {
         return .{ .ref = self.ref, .off = 0 };
     }
@@ -264,6 +278,10 @@ const Principals = struct {
         const next, const ref = try proto.rfc4251.parse_string(src);
 
         return .{ next, .{ .ref = ref } };
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return proto.encoded_size(self.ref);
     }
 
     pub fn iter(self: *const Self) Self.Iterator {
@@ -349,6 +367,18 @@ fn GenericCert(comptime M: type, comptime T: type) type {
         pub fn from_bytes(src: []const u8) Error!Self {
             return try Self.from(src);
         }
+
+        pub fn enconded_sig_size(self: *const Self) u32 {
+            var ret: u32 = 0;
+
+            inline for (std.meta.fields(Self)) |field| {
+                if (comptime !std.mem.eql(u8, "signature", field.name)) {
+                    ret += proto.encoded_size(@field(self, field.name));
+                }
+            }
+
+            return ret + @sizeOf(u32);
+        }
     };
 }
 
@@ -368,6 +398,10 @@ pub const Rsa = GenericCert(MagicString(enum {
 
         return .{ next + last, .{ .e = e, .n = n } };
     }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return proto.struct_encoded_size(self);
+    }
 });
 
 pub const Ecdsa = GenericCert(MagicString(enum {
@@ -386,6 +420,10 @@ pub const Ecdsa = GenericCert(MagicString(enum {
 
         return .{ next + last, .{ .curve = curve, .pk = pk } };
     }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return proto.struct_encoded_size(self);
+    }
 });
 
 pub const Ed25519 = GenericCert(MagicString(enum {
@@ -399,5 +437,9 @@ pub const Ed25519 = GenericCert(MagicString(enum {
         const next, const pk = try proto.rfc4251.parse_string(src);
 
         return .{ next, .{ .pk = pk } };
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return proto.struct_encoded_size(self);
     }
 });
