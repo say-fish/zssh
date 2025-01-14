@@ -2,6 +2,7 @@ const std = @import("std");
 
 const proto = @import("proto.zig");
 const decoder = @import("decoder.zig");
+const mem = @import("mem.zig");
 
 pub const Error = error{
     /// This indicates, either: PEM corruption, DER corruption, or an
@@ -16,12 +17,30 @@ pub const Error = error{
 pub const pk = struct {
     // TODO: add support for FIDO2/U2F keys
 
-    pub const PkDecoder = decoder.GenericDecoder(Pem, std.base64.Base64Decoder);
-
     pub const Pem = struct {
         magic: []const u8,
-        der: []u8,
+        der: []const u8,
         comment: proto.Blob([]const u8),
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) !Self {
+            return try decoder.parse(Self, src);
+        }
+
+        pub fn decode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) !mem.Managed([]u8) {
+            return .{
+                .allocator = allocator,
+                .data = try decoder.decode_with_true_size(
+                    allocator,
+                    std.base64.standard.Decoder,
+                    self.der,
+                ),
+            };
+        }
 
         pub fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .any) {
             return std.mem.tokenizeAny(u8, src, " ");
@@ -169,23 +188,6 @@ pub const pk = struct {
 };
 
 pub const sk = struct {
-    pub const SkDecoder = decoder.GenericDecoder(Pem, std.base64.Base64DecoderWithIgnore);
-
-    pub fn Managed(comptime T: type) type {
-        return struct {
-            data: T,
-            allocator: std.mem.Allocator,
-            ref: []u8,
-
-            const Self = @This();
-
-            pub fn deinit(self: *Self) void {
-                std.crypto.secureZero(u8, self.ref);
-                self.allocator.free(self.ref);
-            }
-        };
-    }
-
     fn MagicString(comptime T: type) type {
         return proto.GenericMagicString(
             T,
@@ -319,11 +321,31 @@ pub const sk = struct {
     /// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG keys.
     pub const Pem = struct {
         _prefix: proto.Literal("BEGIN OPENSSH PRIVATE KEY"),
-        der: []u8,
+        der: []const u8,
         _posfix: proto.Literal("END OPENSSH PRIVATE KEY"),
+
+        const Self = @This();
 
         pub fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .sequence) {
             return std.mem.tokenizeSequence(u8, src, "-----");
+        }
+
+        pub fn parse(src: []const u8) !Self {
+            return try decoder.parse(Self, src);
+        }
+
+        pub fn decode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) !mem.Managed([]u8) {
+            return .{
+                .allocator = allocator,
+                .data = try decoder.decode_with_total_size(
+                    allocator,
+                    decoder.base64.pem.Decoder,
+                    self.der,
+                ),
+            };
         }
     };
 
@@ -376,7 +398,7 @@ pub const sk = struct {
                 self: *const Self,
                 allocator: std.mem.Allocator,
                 passphrase: ?[]const u8,
-            ) !Managed(Pri) {
+            ) !mem.ManagedSecret(Pri) {
                 if (self.is_encrypted() and passphrase == null)
                     return error.MissingPassphrase;
 

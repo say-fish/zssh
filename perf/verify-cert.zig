@@ -2,6 +2,11 @@ const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
 
+const Ed25519 = sshcrypto.cert.Ed25519;
+const Pem = sshcrypto.cert.Pem;
+const PublicKey = std.crypto.sign.Ed25519.PublicKey;
+const Signature = std.crypto.sign.Ed25519.Signature;
+
 const MAX_RUNS: usize = 0x01 << 16;
 
 pub fn main() !void {
@@ -11,20 +16,25 @@ pub fn main() !void {
 
     defer if (gpa.deinit() == .leak) @panic("LEAK");
 
-    var pem = try sshcrypto.cert.CertDecoder
-        .init(allocator, std.base64.standard.Decoder)
-        .decode(@embedFile("ed25519-cert.pub"));
-    defer pem.deinit();
+    const pem = try Pem.parse(@embedFile("ed25519-cert.pub"));
+    var der = try pem.decode(allocator);
+    defer der.deinit();
 
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
-        const cert = try sshcrypto.cert.Ed25519.from_bytes(pem.data.der);
+        const cert = try Ed25519.from_bytes(der.data);
 
-        const signature = std.crypto.sign.Ed25519.Signature.fromBytes(cert.signature.ed25519.sm[0..64].*);
-        const pk = try std.crypto.sign.Ed25519.PublicKey.fromBytes(cert.signature_key.ed25519.pk[0..32].*);
+        const signature = Signature.fromBytes(
+            cert.signature.ed25519.sm[0..64].*,
+        );
+        const pk = try PublicKey.fromBytes(
+            cert.signature_key.ed25519.pk[0..32].*,
+        );
 
-        std.mem.doNotOptimizeAway(try signature.verify(pem.data.der[0 .. pem.data.der.len - 87], pk));
+        std.mem.doNotOptimizeAway(
+            try signature.verify(der.data[0..cert.enconded_sig_size()], pk),
+        );
     }
 
     const elapsed = timer.read();

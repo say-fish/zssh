@@ -2,9 +2,10 @@ const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
 
-const sk = sshcrypto.key.sk;
+const Ed25519 = sshcrypto.key.sk.Ed25519;
+const Pem = sshcrypto.key.sk.Pem;
 
-const MAX_RUNS: usize = 0x01 << 26;
+const MAX_RUNS: usize = 0x01 << 12;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -13,10 +14,10 @@ pub fn main() !void {
 
     defer if (gpa.deinit() == .leak) @panic("LEAK");
 
-    var pem = try sshcrypto.key.sk.SkDecoder
-        .init(allocator, sshcrypto.decoder.base64.pem.Decoder)
-        .decode(@embedFile("ed25519-key"));
-    defer pem.deinit();
+    const pem = try Pem.parse(@embedFile("ed25519-key"));
+
+    var der = try pem.decode(allocator);
+    defer der.deinit();
 
     var buf = std.mem.zeroes([2048]u8);
 
@@ -25,13 +26,12 @@ pub fn main() !void {
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
-        const key = try sk.Ed25519.from_bytes(pem.data.der);
+        const key = try Ed25519.from_bytes(der.data);
 
         var skey = try key.get_private_key(fixed_allocator.allocator(), null);
+        defer skey.deinit();
 
         std.mem.doNotOptimizeAway(skey);
-
-        defer skey.deinit();
     }
 
     const elapsed = timer.read();

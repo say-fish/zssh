@@ -2,11 +2,11 @@ const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
 
-const SshSig = sshcrypto.sig.SshSig;
-
-const Signature = std.crypto.sign.Ed25519.Signature;
+const Pem = sshcrypto.sig.SshSig.Pem;
 const PublicKey = std.crypto.sign.Ed25519.PublicKey;
 const Sha512 = std.crypto.hash.sha2.Sha512;
+const Signature = std.crypto.sign.Ed25519.Signature;
+const SshSig = sshcrypto.sig.SshSig;
 
 const MAX_RUNS: usize = 0x01 << 10;
 
@@ -17,8 +17,10 @@ pub fn main() !void {
 
     defer if (gpa.deinit() == .leak) @panic("LEAK");
 
-    const pem = try SshSig.SshSigDecoder.init(allocator, sshcrypto.decoder.base64.pem.Decoder).decode(@embedFile("test.file.sig"));
-    defer pem.deinit();
+    const pem = try Pem.parse(@embedFile("test.file.sig"));
+
+    var der = try pem.decode(allocator);
+    defer der.deinit();
 
     // var buf = std.mem.zeroes([4096]u8);
 
@@ -27,7 +29,7 @@ pub fn main() !void {
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
-        const sshsig = try SshSig.from_pem(pem.data);
+        const sshsig = try SshSig.from_bytes(der.data);
 
         var hash: [Sha512.digest_length]u8 = undefined;
 

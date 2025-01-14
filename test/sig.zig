@@ -4,27 +4,35 @@ const builtin = @import("builtin");
 const sshcrypto = @import("sshcrypto");
 const sig = sshcrypto.sig;
 
-const sshsig_decoder = sig.SshSig.SshSigDecoder
-    .init(std.testing.allocator, sshcrypto.decoder.base64.pem.Decoder);
+const SshSig = sshcrypto.sig.SshSig;
+const Pem = SshSig.Pem;
+
+const expect = std.testing.expect;
+const expect_equal = std.testing.expectEqual;
 
 test "get SshSig signature Blob" {
-    const pem = try sshsig_decoder.decode(@embedFile("test.file.sig"));
-    defer pem.deinit();
+    const pem = try Pem.parse(@embedFile("test.file.sig"));
 
-    const sshsig = try sig.SshSig.from_pem(pem.data);
+    var sshsig = try SshSig.from_pem(std.testing.allocator, &pem);
+    defer sshsig.deinit();
 
-    var blob = try sshsig.get_signature_blob(std.testing.allocator, &[_]u8{0x00});
+    var blob = try sshsig.data.get_signature_blob(
+        std.testing.allocator,
+        &[_]u8{0x00},
+    );
     defer blob.deinit();
 }
 
 test "parse and verify SshSig" {
-    const pem = try sshsig_decoder.decode(@embedFile("test.file.sig"));
-    defer pem.deinit();
+    const pem = try Pem.parse(@embedFile("test.file.sig"));
 
-    const sshsig = try sig.SshSig.from_pem(pem.data);
+    var der = try pem.decode(std.testing.allocator);
+    defer der.deinit();
 
-    try std.testing.expectEqual(1, sshsig.version);
-    try std.testing.expect(sshsig.namespace.len != 0);
+    const sshsig = try SshSig.from_bytes(der.data);
+
+    try expect_equal(1, sshsig.version);
+    try expect(sshsig.namespace.len != 0);
 
     if (comptime builtin.os.tag != .windows) {
         switch (sshsig.publickey) {

@@ -2,6 +2,9 @@ const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
 
+const Ed25519 = sshcrypto.cert.Ed25519;
+const Pem = sshcrypto.cert.Pem;
+
 const MAX_RUNS: usize = 0x01 << 26;
 
 pub fn main() !void {
@@ -11,15 +14,15 @@ pub fn main() !void {
 
     defer if (gpa.deinit() == .leak) @panic("LEAK");
 
-    var pem = try sshcrypto.cert.CertDecoder
-        .init(allocator, std.base64.standard.Decoder)
-        .decode(@embedFile("ed25519-cert.pub"));
-    defer pem.deinit();
+    const pem = try Pem.parse(@embedFile("ed25519-cert.pub"));
+
+    var der = try pem.decode(allocator);
+    defer der.deinit();
 
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
-        const cert = try sshcrypto.cert.Ed25519.from_bytes(pem.data.der);
+        const cert = try sshcrypto.cert.Ed25519.from_bytes(der.data);
 
         std.mem.doNotOptimizeAway(cert);
     }

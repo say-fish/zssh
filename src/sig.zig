@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 
 const decoder = @import("decoder.zig");
 const key = @import("key.zig");
+const mem = @import("mem.zig");
 const proto = @import("proto.zig");
 
 // TODO: Error
@@ -166,8 +167,6 @@ pub const SshSig = struct {
 
     const Self = @This();
 
-    pub const SshSigDecoder = decoder.GenericDecoder(Pem, std.base64.Base64DecoderWithIgnore);
-
     pub const Magic = MagicPreamble(enum { SSHSIG });
 
     pub const HashAlgorithm = MagicString(enum { sha256, sha512 });
@@ -180,19 +179,47 @@ pub const SshSig = struct {
         return try Self.from(src);
     }
 
-    pub fn from_pem(pem: Pem) !Self {
-        return try Self.from(pem.der);
+    pub fn from_pem(
+        allocator: std.mem.Allocator,
+        pem: *const Pem,
+    ) !mem.ManagedWithRef(Self) {
+        var der = try pem.decode(allocator);
+        errdefer der.deinit();
+
+        return .{
+            .allocator = allocator,
+            .data = try Self.from_bytes(der.data),
+            .ref = der.data,
+        };
     }
 
     pub const Pem = struct {
         _prefix: proto.Literal("BEGIN SSH SIGNATURE"),
-        der: []u8,
+        der: []const u8,
         _posfix: proto.Literal("END SSH SIGNATURE"),
 
         pub fn tokenize(
             src: []const u8,
         ) std.mem.TokenIterator(u8, .sequence) {
             return std.mem.tokenizeSequence(u8, src, "-----");
+        }
+
+        pub fn parse(src: []const u8) !Pem {
+            return try decoder.parse(Pem, src);
+        }
+
+        pub fn decode(
+            self: *const Pem,
+            allocator: std.mem.Allocator,
+        ) !mem.Managed([]u8) {
+            return .{
+                .allocator = allocator,
+                .data = try decoder.decode_with_total_size(
+                    allocator,
+                    decoder.base64.pem.Decoder,
+                    self.der,
+                ),
+            };
         }
     };
 
@@ -212,23 +239,11 @@ pub const SshSig = struct {
         }
     };
 
-    pub fn Managed(comptime T: type) type {
-        return struct {
-            data: T,
-            allocator: std.mem.Allocator,
-            ref: []u8,
-
-            pub fn deinit(self: *@This()) void {
-                self.allocator.free(self.ref);
-            }
-        };
-    }
-
     pub fn get_signature_blob(
         self: *const Self,
         allocator: std.mem.Allocator,
         hmsg: []const u8,
-    ) !Managed(Blob) {
+    ) !mem.ManagedWithRef(Blob) {
         const size = self.magic.encoded_size() +
             proto.rfc4251.encoded_size(self.namespace) +
             proto.rfc4251.encoded_size(self.reserved) +

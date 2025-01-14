@@ -9,6 +9,7 @@ const std = @import("std");
 
 const decoder = @import("decoder.zig");
 const key = @import("key.zig");
+const mem = @import("mem.zig");
 const proto = @import("proto.zig");
 const sig = @import("sig.zig");
 
@@ -38,8 +39,9 @@ fn GenericIteratorImpl(comptime T: type, parse_value: anytype) type {
         pub fn next(self: *Self) T {
             if (self.done()) return null;
 
-            const off, const ret = proto.rfc4251.parse_string(self.ref[self.off..]) catch
-                return null;
+            const off, const ret = proto.rfc4251.parse_string(
+                self.ref[self.off..],
+            ) catch return null;
 
             self.off += off;
 
@@ -66,9 +68,30 @@ fn GenericIterator(comptime parse_value: anytype) type {
 }
 
 pub const Pem = struct {
+    // FIXME: MagicString
     magic: []const u8,
-    der: []u8,
+    der: []const u8,
     comment: []const u8,
+
+    const Self = @This();
+
+    pub fn parse(src: []const u8) !Self {
+        return try decoder.parse(Self, src);
+    }
+
+    pub fn decode(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+    ) !mem.Managed([]u8) {
+        return .{
+            .allocator = allocator,
+            .data = try decoder.decode_with_true_size(
+                allocator,
+                std.base64.standard.Decoder,
+                self.der,
+            ),
+        };
+    }
 
     pub inline fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .any) {
         return std.mem.tokenizeAny(u8, src, " ");
@@ -310,29 +333,43 @@ pub const Cert = union(enum) {
         @"ssh-ed25519-cert-v01@openssh.com",
     });
 
-    // TODO: from bytes...
-
-    pub fn from_pem(pem: *const Pem) Error!Self {
-        const magic = try Magic.from_slice(pem.magic);
-
+    fn from(magic: anytype, src: []const u8) !Self {
         return switch (magic) {
             .@"ssh-rsa-cert-v01@openssh.com",
             .@"rsa-sha2-256-cert-v01@openssh.com",
             .@"rsa-sha2-512-cert-v01@openssh.com",
-            => .{ .rsa = try Rsa.from_pem(pem) },
+            => .{ .rsa = try Rsa.from_bytes(src) },
 
             .@"ecdsa-sha2-nistp256-cert-v01@openssh.com",
             .@"ecdsa-sha2-nistp384-cert-v01@openssh.com",
             .@"ecdsa-sha2-nistp521-cert-v01@openssh.com",
-            => .{ .ecdsa = try Ecdsa.from_pem(pem) },
+            => .{ .ecdsa = try Ecdsa.from_bytes(src) },
 
             .@"ssh-ed25519-cert-v01@openssh.com",
-            => .{ .ed25519 = try Ed25519.from_pem(pem) },
+            => .{ .ed25519 = try Ed25519.from_bytes(src) },
+        };
+    }
+
+    pub fn from_bytes(src: []const u8) !Self {
+        return Self.from((try Magic.from_bytes(src)).value, src);
+    }
+
+    pub fn from_pem(
+        allocator: std.mem.Allocator,
+        pem: *const Pem,
+    ) !mem.ManagedWithRef(Self) {
+        const magic = try Magic.from_slice(pem.magic);
+
+        var der = try pem.decode(allocator);
+        errdefer der.deinit();
+
+        return .{
+            .allocator = allocator,
+            .data = try Self.from(magic, der.data),
+            .ref = der.data,
         };
     }
 };
-
-pub const CertDecoder = decoder.GenericDecoder(Pem, std.base64.Base64Decoder);
 
 fn GenericCert(comptime M: type, comptime T: type) type {
     // TODO: assert T is a struct
@@ -360,8 +397,19 @@ fn GenericCert(comptime M: type, comptime T: type) type {
             return try proto.parse(Self, src);
         }
 
-        pub fn from_pem(pem: *const Pem) Error!Self {
-            return try Self.from(pem.der);
+        pub fn from_pem(
+            allocator: std.mem.Allocator,
+            pem: *const Pem,
+        ) !mem.ManagedWithRef(Self) {
+            var der = try pem.decode(allocator);
+            errdefer der.deinit();
+
+            return .{
+                .allocator = allocator,
+                // FIXME asssert T has `from_bytes`
+                .data = try Self.from_bytes(der.data),
+                .ref = der.data,
+            };
         }
 
         pub fn from_bytes(src: []const u8) Error!Self {
