@@ -2,8 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const decoder = @import("decoder.zig");
-const key = @import("key.zig");
 const mem = @import("mem.zig");
+const pk = @import("pk.zig");
 const proto = @import("proto.zig");
 
 // TODO: Error
@@ -149,7 +149,7 @@ pub const SshSig = struct {
     /// support.
     version: u32,
     /// See: `sshcrypto.key.public.Pk`
-    publickey: key.pk.Pk,
+    publickey: pk.Pk,
     /// The purpose of the namespace value is to specify a unambiguous
     /// interpretation domain for the signature, e.g. file signing. This
     /// prevents cross-protocol attacks caused by signatures intended for one
@@ -292,11 +292,11 @@ pub const Sig = union(enum) {
     });
 
     pub fn parse(src: []const u8) proto.Error!proto.Cont(Sig) {
-        const next, const pk = try proto.rfc4251.parse_string(src);
+        const next, const key = try proto.rfc4251.parse_string(src);
 
         return .{
             next,
-            Self.from_bytes(pk) catch return error.InvalidData,
+            Self.from_bytes(key) catch return error.InvalidData,
         };
     }
 

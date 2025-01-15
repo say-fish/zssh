@@ -55,6 +55,8 @@ const Test = struct {
     use_llvm: bool = true,
 
     assets: ?*const TestAssets = null,
+
+    name: []const u8,
 };
 
 fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
@@ -64,6 +66,7 @@ fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
         .optimize = t.optimize,
         .use_llvm = t.use_llvm,
         .use_lld = t.use_lld,
+        .name = t.name,
     });
 
     if (t.mod) |mod|
@@ -77,7 +80,8 @@ fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
         );
     };
 
-    const run_test_case = b.addRunArtifact(test_case);
+    var run_test_case = b.addRunArtifact(test_case);
+    run_test_case.has_side_effects = true;
 
     step.dependOn(&run_test_case.step);
 }
@@ -88,10 +92,7 @@ pub fn build(b: *std.Build) void {
 
     const llvm = !(b.option(bool, "nollvm", "Don't use LLVM") orelse false);
 
-    const lld = if (builtin.os.tag == .windows or builtin.os.tag == .macos)
-        false
-    else
-        llvm;
+    const lld = if (builtin.os.tag == .windows or builtin.os.tag == .macos) false else llvm;
 
     const mod = b.addModule("sshcrypto", .{
         .root_source_file = .{
@@ -113,6 +114,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     {
         add_test(b, test_step, .{
+            .name = "cert",
             .root_source_file = b.path("test/cert.zig"),
             .target = target,
             .optimize = optimize,
@@ -124,6 +126,7 @@ pub fn build(b: *std.Build) void {
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
+            .name = "sig",
             .root_source_file = b.path("test/sig.zig"),
             .target = target,
             .optimize = optimize,
@@ -135,7 +138,8 @@ pub fn build(b: *std.Build) void {
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
-            .root_source_file = b.path("test/key.zig"),
+            .name = "pk",
+            .root_source_file = b.path("test/pk.zig"),
             .target = target,
             .optimize = optimize,
             .mod = mod,
@@ -146,6 +150,19 @@ pub fn build(b: *std.Build) void {
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
+            .name = "sk",
+            .root_source_file = b.path("test/sk.zig"),
+            .target = target,
+            .optimize = optimize,
+            .mod = mod,
+            .mod_name = "sshcrypto",
+            .use_lld = lld,
+            .use_llvm = llvm,
+            .assets = &assets,
+        }) catch @panic("OOM");
+
+        add_test(b, test_step, .{
+            .name = "proto",
             .root_source_file = b.path("src/proto.zig"),
             .target = target,
             .optimize = optimize,
@@ -176,19 +193,20 @@ pub fn build(b: *std.Build) void {
 
     const perf_step = b.step("perf", "Perf record");
     {
-        const Names = enum { @"verify-cert", cert, key, sig };
+        const Names = enum { @"verify-cert", cert, sk, pk, sig };
 
-        const perf_name =
-            b.option(Names, "perf", "Perf to run (default: key)") orelse .key;
+        const perf_opt =
+            b.option(Names, "perf", "Perf to run (default: key)") orelse .sk;
+
+        const perf_file = b.fmt("perf/{s}.zig", .{@tagName(perf_opt)});
 
         const perf_exe = b.addExecutable(.{
-            .name = "perf",
-            .root_source_file = b.path(
-                b.fmt("perf/{s}.zig", .{@tagName(perf_name)}),
-            ),
+            .name = b.fmt("perf: {s}", .{@tagName(perf_opt)}),
+            .root_source_file = b.path(perf_file),
             .target = target,
             .use_lld = lld,
             .use_llvm = llvm,
+            .omit_frame_pointer = true,
             .optimize = .ReleaseFast,
         });
 
@@ -209,12 +227,5 @@ pub fn build(b: *std.Build) void {
         run_perf.addArtifactArg(perf_exe);
 
         perf_step.dependOn(&run_perf.step);
-    }
-
-    const debug_step = b.step("debug", "Run test target with gdb");
-    {
-        const run_debug = b.addSystemCommand(&.{"gdb"});
-
-        debug_step.dependOn(&run_debug.step);
     }
 }

@@ -8,7 +8,7 @@
 const std = @import("std");
 
 const decoder = @import("decoder.zig");
-const key = @import("key.zig");
+const pk = @import("pk.zig");
 const mem = @import("mem.zig");
 const proto = @import("proto.zig");
 const sig = @import("sig.zig");
@@ -386,7 +386,7 @@ fn GenericCert(comptime M: type, comptime T: type) type {
         critical_options: CriticalOptions,
         extensions: Extensions,
         reserved: []const u8,
-        signature_key: key.pk.Pk,
+        signature_key: pk.Pk,
         signature: sig.Sig,
 
         const Self = @This();
@@ -464,9 +464,9 @@ pub const Ecdsa = GenericCert(MagicString(enum {
 
     pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
         const next, const curve = try proto.rfc4251.parse_string(src);
-        const last, const pk = try proto.rfc4251.parse_string(src[next..]);
+        const last, const key = try proto.rfc4251.parse_string(src[next..]);
 
-        return .{ next + last, .{ .curve = curve, .pk = pk } };
+        return .{ next + last, .{ .curve = curve, .pk = key } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -482,9 +482,9 @@ pub const Ed25519 = GenericCert(MagicString(enum {
     const Self = @This();
 
     pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const pk = try proto.rfc4251.parse_string(src);
+        const next, const key = try proto.rfc4251.parse_string(src);
 
-        return .{ next, .{ .pk = pk } };
+        return .{ next, .{ .pk = key } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {

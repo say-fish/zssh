@@ -1,72 +1,30 @@
 const std = @import("std");
 
 const sshcrypto = @import("sshcrypto");
-const pk = sshcrypto.key.pk;
-const sk = sshcrypto.key.sk;
 
 const expect_equal_slices = std.testing.expectEqualSlices;
 const expect_error = std.testing.expectError;
 
-// FIXME:
-// test "decode in place" {
-//     const rodata = @embedFile("rsa-key.pub");
-//
-//     const rsa_key = try std.testing.allocator.alloc(u8, rodata.len);
-//     defer std.testing.allocator.free(rsa_key);
-//
-//     std.mem.copyForwards(u8, rsa_key, rodata);
-//
-//     _ = try pk.PkDecoder.decode_in_place(
-//         std.base64.standard.Decoder,
-//         rsa_key,
-//     );
-// }
-
-test "decode with allocator" {
-    const pem = try pk.Pem.parse(@embedFile("rsa-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
-    defer der.deinit();
-}
-
-test "parse Rsa public key" {
-    const pem = try pk.Pem.parse(@embedFile("rsa-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
-    defer der.deinit();
-
-    _ = try pk.Rsa.from_bytes(der.data);
-}
-
-test "parse Ecdsa public key" {
-    const pem = try pk.Pem.parse(@embedFile("ecdsa-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
-    defer der.deinit();
-
-    _ = try pk.Ecdsa.from_bytes(der.data);
-}
-
-test "parse ed25519 public key" {
-    const pem = try pk.Pem.parse(@embedFile("ed25519-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
-    defer der.deinit();
-
-    _ = try pk.Ed25519.from_bytes(der.data);
-}
+const Ecdsa = sshcrypto.sk.Ecdsa;
+const Ed25519 = sshcrypto.sk.Ed25519;
+const Pem = sshcrypto.sk.Pem;
+const Rsa = sshcrypto.sk.Rsa;
 
 test "parse Rsa private key: get_public_key" {
-    const pem = try sk.Pem.parse(@embedFile("rsa-key"));
+    const pem = try Pem.parse(@embedFile("rsa-key"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Rsa.from_bytes(der.data);
+    const key = try Rsa.from_bytes(der.data);
 
     _ = try key.get_public_key();
 }
 test "Rsa private key: get_private_key" {
-    const pem = try sk.Pem.parse(@embedFile("rsa-key"));
+    const pem = try Pem.parse(@embedFile("rsa-key"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Rsa.from_bytes(der.data);
+    const key = try Rsa.from_bytes(der.data);
 
     var skey = try key.get_private_key(std.testing.allocator, null);
     defer skey.deinit();
@@ -78,11 +36,11 @@ test "Rsa private key: get_private_key" {
 }
 
 test "Rsa private key with passphrase" {
-    const pem = try sk.Pem.parse(@embedFile("rsa-key-123"));
+    const pem = try Pem.parse(@embedFile("rsa-key-123"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Rsa.from_bytes(der.data);
+    const key = try Rsa.from_bytes(der.data);
 
     var skey = try key.get_private_key(std.testing.allocator, "123");
     defer skey.deinit();
@@ -95,11 +53,11 @@ test "Rsa private key with passphrase" {
 }
 
 test "Rsa private key with wrong passphrase" {
-    const pem = try sk.Pem.parse(@embedFile("rsa-key-123"));
+    const pem = try Pem.parse(@embedFile("rsa-key-123"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Rsa.from_bytes(der.data);
+    const key = try Rsa.from_bytes(der.data);
 
     try expect_error(
         error.InvalidChecksum,
@@ -108,11 +66,11 @@ test "Rsa private key with wrong passphrase" {
 }
 
 test "Ed25519 private key: get_private_key" {
-    const pem = try sk.Pem.parse(@embedFile("ed25519-key"));
+    const pem = try Pem.parse(@embedFile("ed25519-key"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Ed25519.from_bytes(der.data);
+    const key = try Ed25519.from_bytes(der.data);
 
     var skey = try key.get_private_key(std.testing.allocator, null);
     defer skey.deinit();
@@ -124,21 +82,21 @@ test "Ed25519 private key: get_private_key" {
 }
 
 test "Ed25519 private key with passphrase: get_public_key" {
-    const pem = try sk.Pem.parse(@embedFile("ed25519-key-123"));
+    const pem = try Pem.parse(@embedFile("ed25519-key-123"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Ed25519.from_bytes(der.data);
+    const key = try Ed25519.from_bytes(der.data);
 
     _ = try key.get_public_key();
 }
 
 test "Ed25519 private key with passphrase: get_private_key" {
-    const pem = try sk.Pem.parse(@embedFile("ed25519-key-123"));
+    const pem = try Pem.parse(@embedFile("ed25519-key-123"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Ed25519.from_bytes(der.data);
+    const key = try Ed25519.from_bytes(der.data);
 
     var skey = try key.get_private_key(std.testing.allocator, "123");
     defer skey.deinit();
@@ -147,23 +105,12 @@ test "Ed25519 private key with passphrase: get_private_key" {
     try expect_equal_slices(u8, skey.data.comment, "root@localhost");
 }
 
-test "ed25519 public key with long comment" {
-    const pem = try pk.Pem.parse(@embedFile("ed25519-key-long-comment.pub"));
-    var der = try pem.decode(std.testing.allocator);
-    defer der.deinit();
-
-    const expected =
-        "This is a long comment with spaces in between, OpenSSH really does allow anything here...\n";
-
-    try expect_equal_slices(u8, expected, pem.comment.val);
-}
-
 test "ed25519 private key with long comment" {
-    const pem = try sk.Pem.parse(@embedFile("ed25519-key-long-comment"));
+    const pem = try Pem.parse(@embedFile("ed25519-key-long-comment"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Ed25519.from_bytes(der.data);
+    const key = try Ed25519.from_bytes(der.data);
 
     var skey = try key.get_private_key(std.testing.allocator, null);
     defer skey.deinit();
@@ -175,11 +122,11 @@ test "ed25519 private key with long comment" {
 }
 
 test "Ecdsa private key" {
-    const pem = try sk.Pem.parse(@embedFile("ecdsa-key"));
+    const pem = try Pem.parse(@embedFile("ecdsa-key"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Ecdsa.from_bytes(der.data);
+    const key = try Ecdsa.from_bytes(der.data);
 
     var skey = try key.get_private_key(std.testing.allocator, null);
     defer skey.deinit();
@@ -191,11 +138,11 @@ test "Ecdsa private key" {
 }
 
 test "Ecdsa private key with passphrase" {
-    const pem = try sk.Pem.parse(@embedFile("ecdsa-key-123"));
+    const pem = try Pem.parse(@embedFile("ecdsa-key-123"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try sk.Ecdsa.from_bytes(der.data);
+    const key = try Ecdsa.from_bytes(der.data);
 
     var skey = try key.get_private_key(std.testing.allocator, "123");
     defer skey.deinit();
