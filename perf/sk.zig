@@ -5,7 +5,7 @@ const sshcrypto = @import("sshcrypto");
 const Ed25519 = sshcrypto.sk.Ed25519;
 const Pem = sshcrypto.sk.Pem;
 
-const MAX_RUNS: usize = 0x01 << 12;
+const MAX_RUNS: usize = 0x01 << 26;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

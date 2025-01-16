@@ -115,6 +115,17 @@ pub fn build(b: *std.Build) void {
     {
         add_test(b, test_step, .{
             .name = "cert",
+            .root_source_file = b.path("src/mem.zig"),
+            .target = target,
+            .optimize = optimize,
+            .mod = mod,
+            .mod_name = "sshcrypto",
+            .use_lld = lld,
+            .use_llvm = llvm,
+        }) catch @panic("OOM");
+
+        add_test(b, test_step, .{
+            .name = "cert",
             .root_source_file = b.path("test/cert.zig"),
             .target = target,
             .optimize = optimize,
@@ -193,7 +204,7 @@ pub fn build(b: *std.Build) void {
 
     const perf_step = b.step("perf", "Perf record");
     {
-        const Names = enum { @"verify-cert", cert, sk, pk, sig };
+        const Names = enum { @"verify-cert", @"verify-sig", cert, sk, pk, sig };
 
         const perf_opt =
             b.option(Names, "perf", "Perf to run (default: key)") orelse .sk;

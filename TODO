@@ -1,3 +1,4 @@
+- Support knownhosts
 - Windows support 😂
 - `zig build dist`
 - Support SSH revocation lists

@@ -244,30 +244,27 @@ pub const SshSig = struct {
         allocator: std.mem.Allocator,
         hmsg: []const u8,
     ) !mem.ManagedWithRef(Blob) {
-        const size = self.magic.encoded_size() +
+        const len = self.magic.encoded_size() +
             proto.rfc4251.encoded_size(self.namespace) +
             proto.rfc4251.encoded_size(self.reserved) +
             self.hash_algorithm.encoded_size() +
             @sizeOf(u32) + hmsg.len;
 
-        var list = std.ArrayList(u8).init(allocator);
-        defer list.deinit();
+        var fbw = try mem.FixedBufferWriter.init(allocator, len);
+        errdefer fbw.deinit();
 
-        try self.magic.serialize(list.writer());
-        try proto.encode_value(list.writer(), self.namespace);
-        try proto.encode_value(list.writer(), self.reserved);
-        try self.hash_algorithm.serialize(list.writer());
-        try proto.encode([]const u8, list.writer(), hmsg);
+        try self.magic.serialize(fbw.writer());
+        try proto.encode_value(fbw.writer(), self.namespace);
+        try proto.encode_value(fbw.writer(), self.reserved);
+        try self.hash_algorithm.serialize(fbw.writer());
+        try proto.encode([]const u8, fbw.writer(), hmsg);
 
-        const ref = try allocator.alloc(u8, size);
-        errdefer allocator.free(ref);
-
-        @memcpy(ref, list.items);
+        std.debug.assert(fbw.head == len);
 
         return .{
-            .data = try Blob.from_bytes(ref),
+            .data = try Blob.from_bytes(fbw.mem),
             .allocator = allocator,
-            .ref = ref,
+            .ref = fbw.mem,
         };
     }
 
@@ -294,10 +291,7 @@ pub const Sig = union(enum) {
     pub fn parse(src: []const u8) proto.Error!proto.Cont(Sig) {
         const next, const key = try proto.rfc4251.parse_string(src);
 
-        return .{
-            next,
-            Self.from_bytes(key) catch return error.InvalidData,
-        };
+        return .{ next, Self.from_bytes(key) catch return error.InvalidData };
     }
 
     pub fn from_bytes(src: []const u8) !Sig {

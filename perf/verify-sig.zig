@@ -8,7 +8,7 @@ const Sha512 = std.crypto.hash.sha2.Sha512;
 const Signature = std.crypto.sign.Ed25519.Signature;
 const SshSig = sshcrypto.sig.SshSig;
 
-const MAX_RUNS: usize = 0x01 << 26;
+const MAX_RUNS: usize = 0x01 << 16;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -32,20 +32,27 @@ pub fn main() !void {
 
         var hash: [Sha512.digest_length]u8 = undefined;
 
+        const signature = Signature.fromBytes(sshsig.signature.ed25519.sm[0..64].*);
+        const pk = try PublicKey.fromBytes(sshsig.publickey.ed25519.pk[0..32].*);
+
+        var sha = Sha512.init(.{});
+        sha.update(@embedFile("test.file"));
+        sha.final(&hash);
+
         var blob = try sshsig.get_signature_blob(
             fixed_allocator.allocator(),
             &hash,
         );
-        defer blob.deinit();
+        blob.deinit();
 
-        std.mem.doNotOptimizeAway(blob);
+        std.mem.doNotOptimizeAway(try signature.verify(blob.ref, pk));
     }
 
     const elapsed = timer.read();
 
     std.debug.print("Parsed SSHSIG, {} times\n", .{MAX_RUNS});
     std.debug.print(
-        "`.from_pem` + `.get_signature_blob` + `.deinit` took ~= {}ns ({} sigs/s)\n",
+        "`.verify` took ~= {}ns ({} sigs/s)\n",
         .{ elapsed / MAX_RUNS, 1000000000 / (elapsed / MAX_RUNS) },
     );
 }
