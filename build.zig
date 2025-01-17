@@ -114,7 +114,7 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     {
         add_test(b, test_step, .{
-            .name = "cert",
+            .name = "mem",
             .root_source_file = b.path("src/mem.zig"),
             .target = target,
             .optimize = optimize,
@@ -239,4 +239,23 @@ pub fn build(b: *std.Build) void {
 
         perf_step.dependOn(&run_perf.step);
     }
+
+    const dummy = b.addTest(.{
+        .name = "sshcrypto",
+        .root_source_file = b.path("src/sshcrypto.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    b.installArtifact(dummy);
+
+    const dummy_check = b.addTest(.{
+        .name = "sshcrypto",
+        .root_source_file = b.path("src/sshcrypto.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const check = b.step("check", "Check if it compiles");
+    check.dependOn(&dummy_check.step);
 }

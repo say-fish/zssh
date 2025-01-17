@@ -144,7 +144,7 @@ pub const CriticalOptions = struct {
         pub const strings = proto.enum_to_str(Self.Tags);
 
         pub fn as_string(self: *const Self.Tags) []const u8 {
-            return Self.Tag.strings[self.*];
+            return Tags.strings[@intFromEnum(self.*)];
         }
     };
 

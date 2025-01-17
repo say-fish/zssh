@@ -19,7 +19,7 @@ fn MagicString(comptime T: type) type {
     return proto.GenericMagicString(
         T,
         proto.parse_null_terminated_str,
-        std.mem.len,
+        proto.null_terminated_str_encoded_size,
     );
 }
 
