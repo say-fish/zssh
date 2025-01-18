@@ -209,6 +209,9 @@ pub fn build(b: *std.Build) void {
         const perf_opt =
             b.option(Names, "perf", "Perf to run (default: key)") orelse .sk;
 
+        const perf_record =
+            b.option(bool, "record", "Perf record?") orelse false;
+
         const perf_file = b.fmt("perf/{s}.zig", .{@tagName(perf_opt)});
 
         const perf_exe = b.addExecutable(.{
@@ -231,13 +234,22 @@ pub fn build(b: *std.Build) void {
             );
         }
 
-        const run_perf =
-            b.addSystemCommand(&.{ "perf", "record", "-e", PERF_EVENTS });
+        const run_perf = if (perf_record)
+            b.addSystemCommand(&.{ "perf", "record", "-e", PERF_EVENTS, "-d", "--" })
+        else
+            b.addSystemCommand(&.{ "perf", "stat", "-d", "--" });
 
         run_perf.has_side_effects = true;
         run_perf.addArtifactArg(perf_exe);
 
+        const assembly = b.addWriteFiles();
+        _ = assembly.addCopyFile(
+            perf_exe.getEmittedAsm(),
+            b.fmt("{s}.asm", .{@tagName(perf_opt)}),
+        );
+
         perf_step.dependOn(&run_perf.step);
+        perf_step.dependOn(&assembly.step);
     }
 
     const dummy = b.addTest(.{

@@ -53,6 +53,6 @@ pub fn main() !void {
     std.debug.print("Parsed SSHSIG, {} times\n", .{MAX_RUNS});
     std.debug.print(
         "`.verify` took ~= {}ns ({} sigs/s)\n",
-        .{ elapsed / MAX_RUNS, 1000000000 / (elapsed / MAX_RUNS) },
+        .{ elapsed / MAX_RUNS, 1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS) },
     );
 }

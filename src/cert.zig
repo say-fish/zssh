@@ -8,8 +8,8 @@
 const std = @import("std");
 
 const decoder = @import("decoder.zig");
-const pk = @import("pk.zig");
 const mem = @import("mem.zig");
+const pk = @import("pk.zig");
 const proto = @import("proto.zig");
 const sig = @import("sig.zig");
 
@@ -29,7 +29,24 @@ fn MagicString(comptime T: type) type {
     );
 }
 
-fn GenericIteratorImpl(comptime T: type, parse_value: anytype) type {
+/// `parse_fn` should be of type:
+/// ```zig
+///     fn ([]const u8, *usize, []const u8) callconv(.@"inline") type
+/// ```
+///                                                              ~~~~
+///                                                                ^
+///                                                                |
+///  +-------------------------------------------------------------+
+///  |
+///  v
+///  Due to a limitation in Zig's type system, `type` cannot be infered as a
+///  "non-comptime" value.
+fn GenericIterator(comptime parse_fn: anytype) type {
+    const T = switch (@typeInfo(@TypeOf(parse_fn))) {
+        .@"fn" => |func| func.return_type.?,
+        else => @compileError("Expected fn"),
+    };
+
     return struct {
         ref: []const u8,
         off: usize,
@@ -45,7 +62,7 @@ fn GenericIteratorImpl(comptime T: type, parse_value: anytype) type {
 
             self.off += off;
 
-            return parse_value(self.ref, &self.off, ret);
+            return parse_fn(self.ref, &self.off, ret);
         }
 
         pub inline fn reset(self: *Self) void {
@@ -56,15 +73,6 @@ fn GenericIteratorImpl(comptime T: type, parse_value: anytype) type {
             return self.off == self.ref.len;
         }
     };
-}
-
-fn GenericIterator(comptime parse_value: anytype) type {
-    const T = switch (@typeInfo(@TypeOf(parse_value))) {
-        .@"fn" => |func| func.return_type.?,
-        else => @compileError("Expected fn"),
-    };
-
-    return GenericIteratorImpl(T, parse_value);
 }
 
 pub const Pem = struct {
@@ -203,6 +211,7 @@ pub const Extensions = struct {
 
     const Self = @This();
 
+    pub const Iterator = GenericIterator(parse_fn);
     pub const Tags = enum(u8) {
         /// Flag indicating that signatures made with this certificate need not
         /// assert FIDO user presence. This option only makes sense for the
@@ -231,9 +240,9 @@ pub const Extensions = struct {
         /// not present.
         @"permit-user-rc" = 0x01 << 5,
 
-        const strings = proto.enum_to_str(Self.Tags);
+        const strings = proto.enum_to_str(Tags);
 
-        pub inline fn as_string(self: *const Self.Tags) []const u8 {
+        pub inline fn as_string(self: *const Tags) []const u8 {
             return Self.strings[@intFromEnum(self.*)];
         }
     };
@@ -248,20 +257,16 @@ pub const Extensions = struct {
         return proto.encoded_size(self.ref);
     }
 
-    pub fn iter(self: *const Self) Self.Iterator {
+    pub fn iter(self: *const Self) Iterator {
         return .{ .ref = self.ref, .off = 0 };
     }
 
-    pub const Iterator = GenericIterator(
-        struct {
-            inline fn parse_value(ref: []const u8, off: *usize, k: []const u8) ?[]const u8 {
-                // Skip empty pair
-                if (ref.len != off.*) off.* += @sizeOf(u32);
+    inline fn parse_fn(ref: []const u8, off: *usize, k: []const u8) ?[]const u8 {
+        // Skip empty pair
+        if (ref.len != off.*) off.* += @sizeOf(u32);
 
-                return k;
-            }
-        }.parse_value,
-    );
+        return k;
+    }
 
     /// Returns the extensions as bitflags, checking if they are valid.
     pub fn to_bitflags(self: *const Self) Error!u8 {
@@ -295,7 +300,7 @@ const Principals = struct {
 
     const Self = @This();
 
-    pub const Iterator = GenericIterator(Self.parse_value);
+    pub const Iterator = GenericIterator(parse_fn);
 
     pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Principals) {
         const next, const ref = try proto.rfc4251.parse_string(src);
@@ -311,7 +316,7 @@ const Principals = struct {
         return .{ .ref = self.ref, .off = 0 };
     }
 
-    inline fn parse_value(_: []const u8, _: *usize, k: []const u8) ?[]const u8 {
+    inline fn parse_fn(_: []const u8, _: *usize, k: []const u8) ?[]const u8 {
         return k;
     }
 };
@@ -333,7 +338,7 @@ pub const Cert = union(enum) {
         @"ssh-ed25519-cert-v01@openssh.com",
     });
 
-    fn from(magic: anytype, src: []const u8) !Self {
+    fn from(magic: Magic.Value, src: []const u8) !Self {
         return switch (magic) {
             .@"ssh-rsa-cert-v01@openssh.com",
             .@"rsa-sha2-256-cert-v01@openssh.com",

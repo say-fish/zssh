@@ -264,4 +264,10 @@ test "multiple critical options iterator" {
     try expect(it.done());
 }
 
+test "parse ed25519 cert with wrong magic string" {
+    const pem = try Pem.parse(@embedFile("ed25519-cert-wrong-magic-string.pub"));
+
+    try expect_error(error.InvalidMagicString, Cert.from_pem(std.testing.allocator, &pem));
+}
+
 // TODO: Add tets for other certs types

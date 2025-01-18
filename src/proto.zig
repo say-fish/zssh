@@ -51,6 +51,7 @@ pub fn GenericMagicString(
         value: T,
 
         const Self = @This();
+        pub const Value = T;
 
         const strings = enum_to_str(T);
 
@@ -73,7 +74,7 @@ pub fn GenericMagicString(
                 }
             }
 
-            return Error.InvalidData;
+            return Error.InvalidMagicString;
         }
 
         pub fn from_slice(src: []const u8) Error!T {
@@ -137,15 +138,23 @@ pub const rfc4251 = struct {
             return Error.InvalidData;
         }
 
-        const size = @sizeOf(u32) + read_int(u32, buf);
+        var len: usize = @sizeOf(u32);
 
-        if (size > buf.len) {
+        // if (@intFromPtr(buf.ptr) % @alignOf(u32) != 0) {
+        //     std.debug.print("aaaaaaaaaaaaaa {}\n", .{@intFromPtr(buf.ptr)});
+
+        //     @panic("dasda");
+        // }
+
+        len += read_int(u32, buf);
+
+        if (len > buf.len) {
             @branchHint(.unlikely);
 
             return Error.MalformedString;
         }
 
-        return .{ size, buf[@sizeOf(u32)..size] };
+        return .{ len, buf[@sizeOf(u32)..len] };
     }
 
     /// Returns the encoded size of a given value, the size is based on the
@@ -163,16 +172,10 @@ pub const rfc4251 = struct {
     }
 };
 
-pub fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]u8) {
-    var i: u32 = 0;
+pub fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]const u8) {
+    const ret: [:0]const u8 = std.mem.span(@as([*c]const u8, src.ptr));
 
-    while (i != src.len) : (i += 1) {
-        if (src[i] == 0x00) {
-            return .{ i + 1, @constCast(@ptrCast(src[0..i])) };
-        }
-    }
-
-    return Error.MalformedString;
+    return .{ ret.len + 1, ret };
 }
 
 pub fn null_terminated_str_encoded_size(src: []const u8) u32 {
@@ -429,7 +432,7 @@ test "serialize GenericMagicString" {
     );
 }
 
-test "`enum_to_str`" {
+test enum_to_str {
     const Enum = enum {
         foo,
         bar,
@@ -446,4 +449,15 @@ test "`enum_to_str`" {
         "this-is-a-test-string",
         strings[@intFromEnum(Enum.@"this-is-a-test-string")],
     );
+}
+test parse_null_terminated_str {
+    const malformed: []const u8 = &[_]u8{ 0x72, 0x72, 0x72 };
+    const str: []const u8 = &[_]u8{ 0x72, 0x72, 0x72, 0x00 };
+
+    _, const a = try parse_null_terminated_str(str);
+    _, const b = try parse_null_terminated_str(malformed);
+
+    try expect_equal(3, a.len);
+    try expect_equal(3, b.len);
+    try expect_equal_strings(a, b);
 }

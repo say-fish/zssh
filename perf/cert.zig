@@ -32,6 +32,6 @@ pub fn main() !void {
     std.debug.print("Parsed SSH cert, {} times\n", .{MAX_RUNS});
     std.debug.print(
         "`.from_bytes` took ~= {}ns ({} certs/s)\n",
-        .{ elapsed / MAX_RUNS, 1000000000 / (elapsed / MAX_RUNS) },
+        .{ elapsed / MAX_RUNS, 1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS) },
     );
 }

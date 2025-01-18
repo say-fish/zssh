@@ -5,7 +5,7 @@ const sshcrypto = @import("sshcrypto");
 const Ed25519 = sshcrypto.pk.Ed25519;
 const Pem = sshcrypto.pk.Pem;
 
-const MAX_RUNS: usize = 0x01 << 12;
+const MAX_RUNS: usize = 0x01 << 30;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -32,6 +32,6 @@ pub fn main() !void {
     std.debug.print("Parsed SSH private key, {} times\n", .{MAX_RUNS});
     std.debug.print(
         "`.from_bytes` + `.get_private_key` + `.deinit` took ~= {}ns ({} keys/s)\n",
-        .{ elapsed / MAX_RUNS, 1000000000 / (elapsed / MAX_RUNS) },
+        .{ elapsed / MAX_RUNS, 1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS) },
     );
 }
