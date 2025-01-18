@@ -113,6 +113,9 @@ pub fn Cont(comptime T: type) type {
 
 pub const rfc4251 = struct {
     inline fn read_int(comptime T: type, buf: []const u8) T {
+        // XXX: We are doing unaligned reads here like crazy, even thought this
+        // implementation explicitly does not do this, on x86_64 this gets
+        // compiled to `movbe`...
         return std.mem.readVarInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
     }
 
@@ -138,15 +141,7 @@ pub const rfc4251 = struct {
             return Error.InvalidData;
         }
 
-        var len: usize = @sizeOf(u32);
-
-        // if (@intFromPtr(buf.ptr) % @alignOf(u32) != 0) {
-        //     std.debug.print("aaaaaaaaaaaaaa {}\n", .{@intFromPtr(buf.ptr)});
-
-        //     @panic("dasda");
-        // }
-
-        len += read_int(u32, buf);
+        const len: usize = read_int(u32, buf) + @sizeOf(u32);
 
         if (len > buf.len) {
             @branchHint(.unlikely);
@@ -178,6 +173,7 @@ pub fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]const u8) {
     return .{ ret.len + 1, ret };
 }
 
+// FIXME: might overflow
 pub fn null_terminated_str_encoded_size(src: []const u8) u32 {
     return @intCast(src.len + 1);
 }
