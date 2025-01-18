@@ -1,10 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const sshcrypto = @import("sshcrypto");
-const sig = sshcrypto.sig;
+const zssh = @import("zssh");
+const sig = zssh.sig;
 
-const SshSig = sshcrypto.sig.SshSig;
+const SshSig = zssh.sig.SshSig;
 const Pem = SshSig.Pem;
 
 const expect = std.testing.expect;

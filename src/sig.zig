@@ -148,7 +148,7 @@ pub const SshSig = struct {
     /// Verifiers MUST reject signatures with versions greater than those they
     /// support.
     version: u32,
-    /// See: `sshcrypto.key.public.Pk`
+    /// See: `zssh.pk.Pk`
     publickey: pk.Pk,
     /// The purpose of the namespace value is to specify a unambiguous
     /// interpretation domain for the signature, e.g. file signing. This

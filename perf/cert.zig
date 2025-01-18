@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const sshcrypto = @import("sshcrypto");
+const zssh = @import("zssh");
 
-const Ed25519 = sshcrypto.cert.Ed25519;
-const Pem = sshcrypto.cert.Pem;
+const Ed25519 = zssh.cert.Ed25519;
+const Pem = zssh.cert.Pem;
 
 const MAX_RUNS: usize = 0x01 << 26;
 
@@ -22,7 +22,7 @@ pub fn main() !void {
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
-        const cert = try sshcrypto.cert.Ed25519.from_bytes(der.data);
+        const cert = try Ed25519.from_bytes(der.data);
 
         std.mem.doNotOptimizeAway(cert);
     }

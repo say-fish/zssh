@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const sshcrypto = @import("sshcrypto");
+const zssh = @import("zssh");
 
-const Ed25519 = sshcrypto.pk.Ed25519;
-const Pem = sshcrypto.pk.Pem;
+const Ed25519 = zssh.pk.Ed25519;
+const Pem = zssh.pk.Pem;
 
 const MAX_RUNS: usize = 0x01 << 30;
 

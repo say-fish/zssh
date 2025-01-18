@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const sshcrypto = @import("sshcrypto");
-const Cert = sshcrypto.cert.Cert;
-const Pem = sshcrypto.cert.Pem;
+const zssh = @import("zssh");
+const Cert = zssh.cert.Cert;
+const Pem = zssh.cert.Pem;
 
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
@@ -52,7 +52,7 @@ test "parse rsa cert bad cert" {
 
     const cert = Cert.from_bytes(der.data);
 
-    try expect_error(sshcrypto.cert.Error.MalformedString, cert);
+    try expect_error(zssh.cert.Error.MalformedString, cert);
 }
 
 test "parse ecdsa cert" {
@@ -91,8 +91,8 @@ test "parse ed25519 cert" {
     }
 }
 
-const Ed25519 = sshcrypto.cert.Ed25519;
-const enconded_sig_size = sshcrypto.cert.Ed25519.enconded_sig_size;
+const Ed25519 = zssh.cert.Ed25519;
+const enconded_sig_size = zssh.cert.Ed25519.enconded_sig_size;
 
 test enconded_sig_size {
     var cert = try Ed25519.from_pem(
@@ -137,7 +137,7 @@ test "extensions iterator" {
         "permit-user-rc",
     };
 
-    const Rsa = sshcrypto.cert.Rsa;
+    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(@embedFile("rsa-cert.pub"));
 
@@ -156,8 +156,8 @@ test "extensions iterator" {
 }
 
 test "extensions to bitflags" {
-    const Ext = sshcrypto.cert.Extensions.Tags;
-    const Rsa = sshcrypto.cert.Rsa;
+    const Ext = zssh.cert.Extensions.Tags;
+    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(@embedFile("rsa-cert.pub"));
 
@@ -184,7 +184,7 @@ test "multiple valid principals iterator" {
         "baz",
     };
 
-    const Rsa = sshcrypto.cert.Rsa;
+    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(@embedFile("multiple-principals-cert.pub"));
 
@@ -204,12 +204,12 @@ test "multiple valid principals iterator" {
 
 test "critical options iterator" {
     // Reference
-    const critical_options = [_]sshcrypto.cert.CriticalOption{.{
+    const critical_options = [_]zssh.cert.CriticalOption{.{
         .kind = .@"force-command",
         .value = "ls -la",
     }};
 
-    const Rsa = sshcrypto.cert.Rsa;
+    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(@embedFile("force-command-cert.pub"));
     var der = try pem.decode(std.testing.allocator);
@@ -231,7 +231,7 @@ test "critical options iterator" {
 
 test "multiple critical options iterator" {
     // Reference
-    const critical_options = [_]sshcrypto.cert.CriticalOption{
+    const critical_options = [_]zssh.cert.CriticalOption{
         .{
             .kind = .@"force-command",
             .value = "ls -la",
@@ -242,7 +242,7 @@ test "multiple critical options iterator" {
         },
     };
 
-    const Rsa = sshcrypto.cert.Rsa;
+    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(
         @embedFile("multiple-critical-options-cert.pub"),

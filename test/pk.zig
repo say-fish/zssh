@@ -1,11 +1,11 @@
 const std = @import("std");
 
-const sshcrypto = @import("sshcrypto");
+const zssh = @import("zssh");
 
-const Ecdsa = sshcrypto.pk.Ecdsa;
-const Ed25519 = sshcrypto.pk.Ed25519;
-const Pem = sshcrypto.pk.Pem;
-const Rsa = sshcrypto.pk.Rsa;
+const Ecdsa = zssh.pk.Ecdsa;
+const Ed25519 = zssh.pk.Ed25519;
+const Pem = zssh.pk.Pem;
+const Rsa = zssh.pk.Rsa;
 
 const expect_equal_slices = std.testing.expectEqualSlices;
 

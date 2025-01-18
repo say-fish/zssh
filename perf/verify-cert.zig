@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const sshcrypto = @import("sshcrypto");
+const zssh = @import("zssh");
 
-const Ed25519 = sshcrypto.cert.Ed25519;
-const Pem = sshcrypto.cert.Pem;
+const Ed25519 = zssh.cert.Ed25519;
+const Pem = zssh.cert.Pem;
 const PublicKey = std.crypto.sign.Ed25519.PublicKey;
 const Signature = std.crypto.sign.Ed25519.Signature;
 

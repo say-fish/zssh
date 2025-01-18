@@ -94,11 +94,11 @@ pub fn build(b: *std.Build) void {
 
     const lld = if (builtin.os.tag == .windows or builtin.os.tag == .macos) false else llvm;
 
-    const mod = b.addModule("sshcrypto", .{
+    const mod = b.addModule("zssh", .{
         .root_source_file = .{
             .src_path = .{
                 .owner = b,
-                .sub_path = b.pathFromRoot("src/sshcrypto.zig"),
+                .sub_path = b.pathFromRoot("src/zssh.zig"),
             },
         },
         .target = target,
@@ -119,7 +119,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .mod = mod,
-            .mod_name = "sshcrypto",
+            .mod_name = "zssh",
             .use_lld = lld,
             .use_llvm = llvm,
         }) catch @panic("OOM");
@@ -130,7 +130,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .mod = mod,
-            .mod_name = "sshcrypto",
+            .mod_name = "zssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -142,7 +142,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .mod = mod,
-            .mod_name = "sshcrypto",
+            .mod_name = "zssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -154,7 +154,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .mod = mod,
-            .mod_name = "sshcrypto",
+            .mod_name = "zssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -166,7 +166,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .optimize = optimize,
             .mod = mod,
-            .mod_name = "sshcrypto",
+            .mod_name = "zssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -186,8 +186,8 @@ pub fn build(b: *std.Build) void {
     const docs_step = b.step("docs", "Build documentation");
     {
         const docs_obj = b.addObject(.{
-            .name = "sshcrypto",
-            .root_source_file = b.path("src/sshcrypto.zig"),
+            .name = "zssh",
+            .root_source_file = b.path("src/zssh.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -224,7 +224,7 @@ pub fn build(b: *std.Build) void {
             .optimize = .ReleaseFast,
         });
 
-        perf_exe.root_module.addImport("sshcrypto", mod);
+        perf_exe.root_module.addImport("zssh", mod);
 
         for (assets.items) |cert| {
             const name, const file = cert;
@@ -253,8 +253,8 @@ pub fn build(b: *std.Build) void {
     }
 
     const dummy = b.addTest(.{
-        .name = "sshcrypto",
-        .root_source_file = b.path("src/sshcrypto.zig"),
+        .name = "zssh",
+        .root_source_file = b.path("src/zssh.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -262,8 +262,8 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(dummy);
 
     const dummy_check = b.addTest(.{
-        .name = "sshcrypto",
-        .root_source_file = b.path("src/sshcrypto.zig"),
+        .name = "zssh",
+        .root_source_file = b.path("src/zssh.zig"),
         .target = target,
         .optimize = optimize,
     });

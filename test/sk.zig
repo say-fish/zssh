@@ -1,14 +1,14 @@
 const std = @import("std");
 
-const sshcrypto = @import("sshcrypto");
+const zssh = @import("zssh");
 
 const expect_equal_slices = std.testing.expectEqualSlices;
 const expect_error = std.testing.expectError;
 
-const Ecdsa = sshcrypto.sk.Ecdsa;
-const Ed25519 = sshcrypto.sk.Ed25519;
-const Pem = sshcrypto.sk.Pem;
-const Rsa = sshcrypto.sk.Rsa;
+const Ecdsa = zssh.sk.Ecdsa;
+const Ed25519 = zssh.sk.Ed25519;
+const Pem = zssh.sk.Pem;
+const Rsa = zssh.sk.Rsa;
 
 test "parse Rsa private key: get_public_key" {
     const pem = try Pem.parse(@embedFile("rsa-key"));
@@ -153,7 +153,7 @@ test "Ecdsa private key with passphrase" {
 }
 
 // test "supported chipers" {
-//     for (sshcrypto.key.private.Cipher.get_supported_ciphers()) |cipher| {
+//     for (zssh.key.private.Cipher.get_supported_ciphers()) |cipher| {
 //         std.debug.print("{s}\n", .{cipher});
 //     }
 // }
