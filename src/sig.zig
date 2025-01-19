@@ -194,9 +194,15 @@ pub const SshSig = struct {
     }
 
     pub const Pem = struct {
-        _prefix: proto.Literal("BEGIN SSH SIGNATURE"),
+        _prefix: decoder.Literal(
+            "BEGIN SSH SIGNATURE",
+            std.mem.TokenIterator(u8, .sequence),
+        ),
         der: []const u8,
-        _posfix: proto.Literal("END SSH SIGNATURE"),
+        _posfix: decoder.Literal(
+            "END SSH SIGNATURE",
+            std.mem.TokenIterator(u8, .sequence),
+        ),
 
         pub fn tokenize(
             src: []const u8,

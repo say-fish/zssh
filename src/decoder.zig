@@ -1,6 +1,38 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+pub fn Literal(comptime L: []const u8, comptime I: type) type {
+    return struct {
+        const PREAMBLE = L;
+
+        const Self = @This();
+        pub fn parse(it: *I) !Self {
+            const src = it.next() orelse
+                return error.InvalidFileFormat;
+
+            if (std.mem.eql(u8, src, L)) {
+                return .{};
+            }
+
+            return error.InvalidLiteral;
+        }
+    };
+}
+
+pub fn Blob(comptime I: type) type {
+    return struct {
+        ref: []const u8,
+
+        const Self = @This();
+
+        pub fn parse(it: *I) !Self {
+            const src = it.rest();
+
+            return .{ .ref = src };
+        }
+    };
+}
+
 // TODO: AutoDecoder
 pub fn parse(comptime T: type, src: []const u8) !T {
     if (@typeInfo(T) != .@"struct")
@@ -13,30 +45,20 @@ pub fn parse(comptime T: type, src: []const u8) !T {
 
     var ret: T = undefined;
 
-    // FIXME: This turned out to be a not so elegant approach. But it
-    // works for now.
     inline for (comptime std.meta.fields(T)) |field| {
-        if (@typeInfo(field.type) == .@"struct" and
-            @hasDecl(field.type, "blob"))
-        {
-            @field(ret, field.name) = field.type.blob(it.rest());
-
-            continue;
-        }
-
-        const val = it.next() orelse
-            return error.InvalidFileFormat;
-
         if (@typeInfo(field.type) == .@"struct" and
             @hasDecl(field.type, "parse"))
         {
-            try field.type.parse(val);
+            @field(ret, field.name) = try field.type.parse(&it);
 
             continue;
         }
 
+        const ref = it.next() orelse
+            return error.InvalidFileFormat;
+
         @field(ret, field.name) = switch (field.type) {
-            []const u8 => val,
+            []const u8 => ref,
             else => @panic("Wrong type"),
         };
     }

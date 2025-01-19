@@ -62,5 +62,5 @@ test "ed25519 public key with long comment" {
     const expected =
         "This is a long comment with spaces in between, OpenSSH really does allow anything here...\n";
 
-    try expect_equal_slices(u8, expected, pem.comment.val);
+    try expect_equal_slices(u8, expected, pem.comment.ref);
 }

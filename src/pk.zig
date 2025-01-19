@@ -19,7 +19,7 @@ pub const Error = error{
 pub const Pem = struct {
     magic: []const u8,
     der: []const u8,
-    comment: proto.Blob([]const u8),
+    comment: decoder.Blob(std.mem.TokenIterator(u8, .any)),
 
     const Self = @This();
 

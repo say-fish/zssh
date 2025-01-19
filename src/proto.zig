@@ -197,28 +197,6 @@ pub const Padding = struct {
     }
 };
 
-pub fn Blob(comptime T: type) type {
-    return struct {
-        val: T,
-
-        pub fn blob(val: T) @This() {
-            return .{ .val = val };
-        }
-    };
-}
-
-pub fn Literal(comptime L: []const u8) type {
-    return struct {
-        pub fn parse(src: []const u8) Error!void {
-            if (std.mem.eql(u8, src, L)) {
-                return;
-            }
-
-            return Error.InvalidLiteral;
-        }
-    };
-}
-
 pub fn encode_value(writer: anytype, value: anytype) !void {
     try encode(@TypeOf(value), writer, value);
 }

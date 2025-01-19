@@ -147,9 +147,15 @@ pub const Cipher = struct {
 
 /// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG keys.
 pub const Pem = struct {
-    _prefix: proto.Literal("BEGIN OPENSSH PRIVATE KEY"),
+    _prefix: decoder.Literal(
+        "BEGIN OPENSSH PRIVATE KEY",
+        std.mem.TokenIterator(u8, .sequence),
+    ),
     der: []const u8,
-    _posfix: proto.Literal("END OPENSSH PRIVATE KEY"),
+    _posfix: decoder.Literal(
+        "END OPENSSH PRIVATE KEY",
+        std.mem.TokenIterator(u8, .sequence),
+    ),
 
     const Self = @This();
 
