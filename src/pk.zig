@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const proto = @import("proto.zig");
-const decoder = @import("decoder.zig");
 const mem = @import("mem.zig");
+const pem = @import("pem.zig");
+const proto = @import("proto.zig");
 
 pub const Error = error{
     /// This indicates, either: PEM corruption, DER corruption, or an
@@ -19,12 +19,12 @@ pub const Error = error{
 pub const Pem = struct {
     magic: []const u8,
     der: []const u8,
-    comment: decoder.Blob(std.mem.TokenIterator(u8, .any)),
+    comment: pem.Blob(std.mem.TokenIterator(u8, .any)),
 
     const Self = @This();
 
     pub fn parse(src: []const u8) !Self {
-        return try decoder.parse(Self, src);
+        return try pem.parse(Self, src);
     }
 
     pub fn decode(
@@ -33,7 +33,7 @@ pub const Pem = struct {
     ) !mem.Managed([]u8) {
         return .{
             .allocator = allocator,
-            .data = try decoder.decode_with_true_size(
+            .data = try pem.decode_with_true_size(
                 allocator,
                 std.base64.standard.Decoder,
                 self.der,
@@ -71,9 +71,10 @@ pub const Rsa = struct {
         return try Self.from(src);
     }
 
-    pub fn from_pem(pem: Pem) Error!Rsa {
+    pub fn from_pem(encoded_pem: Pem) Error!Rsa {
+        // FIXME:
         // XXX: Check if PEM magic matches what we got from the DER
-        return try Self.from(pem.der);
+        return try Self.from(encoded_pem.der);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -102,8 +103,8 @@ pub const Ecdsa = struct {
         return try Self.from(src);
     }
 
-    pub fn from_pem(pem: Pem) Error!Ecdsa {
-        return try Self.from(pem.der);
+    pub fn from_pem(encoded_pem: Pem) Error!Ecdsa {
+        return try Self.from(encoded_pem.der);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -127,8 +128,9 @@ pub const Ed25519 = struct {
         return try Self.from(src);
     }
 
-    pub fn from_pem(pem: Pem) Error!Ed25519 {
-        return try Self.from(pem.der);
+    // FIXME:
+    pub fn from_pem(encoded_pem: Pem) Error!Ed25519 {
+        return try Self.from(encoded_pem.der);
     }
 
     pub fn encoded_size(self: *const Self) u32 {

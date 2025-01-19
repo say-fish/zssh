@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const proto = @import("proto.zig");
-const decoder = @import("decoder.zig");
+const pem = @import("pem.zig");
 const mem = @import("mem.zig");
 const pk = @import("pk.zig");
 
@@ -147,12 +147,12 @@ pub const Cipher = struct {
 
 /// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG keys.
 pub const Pem = struct {
-    _prefix: decoder.Literal(
+    _prefix: pem.Literal(
         "BEGIN OPENSSH PRIVATE KEY",
         std.mem.TokenIterator(u8, .sequence),
     ),
     der: []const u8,
-    _posfix: decoder.Literal(
+    _posfix: pem.Literal(
         "END OPENSSH PRIVATE KEY",
         std.mem.TokenIterator(u8, .sequence),
     ),
@@ -164,7 +164,7 @@ pub const Pem = struct {
     }
 
     pub fn parse(src: []const u8) !Self {
-        return try decoder.parse(Self, src);
+        return try pem.parse(Self, src);
     }
 
     pub fn decode(
@@ -173,9 +173,9 @@ pub const Pem = struct {
     ) !mem.Managed([]u8) {
         return .{
             .allocator = allocator,
-            .data = try decoder.decode_with_total_size(
+            .data = try pem.decode_with_total_size(
                 allocator,
-                decoder.base64.pem.Decoder,
+                pem.base64.Decoder,
                 self.der,
             ),
         };
@@ -266,8 +266,8 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
             return try Self.from(src);
         }
 
-        pub fn from_pem(pem: Pem) Error!Self {
-            return try Self.from(pem.der);
+        pub fn from_pem(encoded_pem: Pem) Error!Self {
+            return try Self.from(encoded_pem.der);
         }
     };
 }

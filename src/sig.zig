@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const decoder = @import("decoder.zig");
 const mem = @import("mem.zig");
+const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 const proto = @import("proto.zig");
 
@@ -181,9 +181,9 @@ pub const SshSig = struct {
 
     pub fn from_pem(
         allocator: std.mem.Allocator,
-        pem: *const Pem,
+        encoded_pem: *const Pem,
     ) !mem.ManagedWithRef(Self) {
-        var der = try pem.decode(allocator);
+        var der = try encoded_pem.decode(allocator);
         errdefer der.deinit();
 
         return .{
@@ -194,12 +194,12 @@ pub const SshSig = struct {
     }
 
     pub const Pem = struct {
-        _prefix: decoder.Literal(
+        _prefix: pem.Literal(
             "BEGIN SSH SIGNATURE",
             std.mem.TokenIterator(u8, .sequence),
         ),
         der: []const u8,
-        _posfix: decoder.Literal(
+        _posfix: pem.Literal(
             "END SSH SIGNATURE",
             std.mem.TokenIterator(u8, .sequence),
         ),
@@ -211,7 +211,7 @@ pub const SshSig = struct {
         }
 
         pub fn parse(src: []const u8) !Pem {
-            return try decoder.parse(Pem, src);
+            return try pem.parse(Pem, src);
         }
 
         pub fn decode(
@@ -220,9 +220,9 @@ pub const SshSig = struct {
         ) !mem.Managed([]u8) {
             return .{
                 .allocator = allocator,
-                .data = try decoder.decode_with_total_size(
+                .data = try pem.decode_with_total_size(
                     allocator,
-                    decoder.base64.pem.Decoder,
+                    pem.base64.Decoder,
                     self.der,
                 ),
             };

@@ -7,7 +7,7 @@
 
 const std = @import("std");
 
-const decoder = @import("decoder.zig");
+const pem = @import("pem.zig");
 const mem = @import("mem.zig");
 const pk = @import("pk.zig");
 const proto = @import("proto.zig");
@@ -84,7 +84,7 @@ pub const Pem = struct {
     const Self = @This();
 
     pub fn parse(src: []const u8) !Self {
-        return try decoder.parse(Self, src);
+        return try pem.parse(Self, src);
     }
 
     pub fn decode(
@@ -93,7 +93,7 @@ pub const Pem = struct {
     ) !mem.Managed([]u8) {
         return .{
             .allocator = allocator,
-            .data = try decoder.decode_with_true_size(
+            .data = try pem.decode_with_true_size(
                 allocator,
                 std.base64.standard.Decoder,
                 self.der,
@@ -361,11 +361,11 @@ pub const Cert = union(enum) {
 
     pub fn from_pem(
         allocator: std.mem.Allocator,
-        pem: *const Pem,
+        encoded_pem: *const Pem,
     ) !mem.ManagedWithRef(Self) {
-        const magic = try Magic.from_slice(pem.magic);
+        const magic = try Magic.from_slice(encoded_pem.magic);
 
-        var der = try pem.decode(allocator);
+        var der = try encoded_pem.decode(allocator);
         errdefer der.deinit();
 
         return .{
@@ -404,9 +404,9 @@ fn GenericCert(comptime M: type, comptime T: type) type {
 
         pub fn from_pem(
             allocator: std.mem.Allocator,
-            pem: *const Pem,
+            encoded_pem: *const Pem,
         ) !mem.ManagedWithRef(Self) {
-            var der = try pem.decode(allocator);
+            var der = try encoded_pem.decode(allocator);
             errdefer der.deinit();
 
             return .{

@@ -104,11 +104,9 @@ pub fn decode_with_total_size(
 }
 
 pub const base64 = struct {
-    pub const pem = struct {
-        pub const Decoder = std.base64.Base64DecoderWithIgnore.init(
-            std.base64.standard.alphabet_chars,
-            std.base64.standard.pad_char,
-            &.{ '\n', '\r' },
-        );
-    };
+    pub const Decoder = std.base64.Base64DecoderWithIgnore.init(
+        std.base64.standard.alphabet_chars,
+        std.base64.standard.pad_char,
+        &.{ '\n', '\r' },
+    );
 };
