@@ -186,6 +186,17 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     {
         add_test(b, test_step, .{
+            .name = "agent",
+            .root_source_file = b.path("test/agent.zig"),
+            .target = target,
+            .optimize = optimize,
+            .mod = mod,
+            .mod_name = "zssh",
+            .use_lld = lld,
+            .use_llvm = llvm,
+        }) catch @panic("OOM");
+
+        add_test(b, test_step, .{
             .name = "mem",
             .root_source_file = b.path("src/mem.zig"),
             .target = target,
@@ -272,6 +283,18 @@ pub fn build(b: *std.Build) void {
 
         docs_step.dependOn(&docs_obj.step);
         docs_step.dependOn(&install_docs.step);
+
+        const doc_server_step = b.step("doc-server", "Start doc server");
+        {
+            std.debug.print("{s}", .{install_docs.options.install_subdir});
+            const run_doc = b.addSystemCommand(&.{ "python3", "-m", "http.server", "-d" });
+
+            run_doc.addDirectoryArg(install_docs.options.source_dir);
+
+            doc_server_step.dependOn(&docs_obj.step);
+            doc_server_step.dependOn(&install_docs.step);
+            doc_server_step.dependOn(&run_doc.step);
+        }
     }
 
     const perf_step = b.step("perf", "Perf record");

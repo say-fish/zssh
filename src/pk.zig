@@ -178,11 +178,7 @@ pub const Pk = union(enum) {
 
     pub fn encoded_size(self: *const Self) u32 {
         return switch (self.*) {
-            .rsa => |value| enc.encoded_size(value),
-
-            .ecdsa => |value| enc.encoded_size(value),
-
-            .ed25519 => |value| enc.encoded_size(value),
+            inline else => |value| enc.encoded_size(value),
         };
     }
 };
