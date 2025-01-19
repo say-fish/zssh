@@ -7,10 +7,10 @@
 
 const std = @import("std");
 
-const pem = @import("pem.zig");
 const mem = @import("mem.zig");
+const pem = @import("pem.zig");
 const pk = @import("pk.zig");
-const proto = @import("proto.zig");
+const enc = @import("enc.zig");
 const sig = @import("sig.zig");
 
 pub const Error = error{
@@ -19,13 +19,13 @@ pub const Error = error{
     /// As per spec, repeated extension are not allowed.
     RepeatedExtension,
     UnkownExtension,
-} || proto.Error;
+} || enc.Error;
 
 fn MagicString(comptime T: type) type {
-    return proto.GenericMagicString(
+    return enc.GenericMagicString(
         T,
-        proto.rfc4251.parse_string,
-        proto.rfc4251.encoded_size,
+        enc.rfc4251.parse_string,
+        enc.rfc4251.encoded_size,
     );
 }
 
@@ -56,7 +56,7 @@ fn GenericIterator(comptime parse_fn: anytype) type {
         pub fn next(self: *Self) T {
             if (self.done()) return null;
 
-            const off, const ret = proto.rfc4251.parse_string(
+            const off, const ret = enc.rfc4251.parse_string(
                 self.ref[self.off..],
             ) catch return null;
 
@@ -112,14 +112,14 @@ pub const CertType = enum(u2) {
 
     const Self = @This();
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(CertType) {
-        const next, const val = try proto.rfc4251.parse_int(u32, src);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(CertType) {
+        const next, const val = try enc.rfc4251.parse_int(u32, src);
 
         return .{ next, @enumFromInt(val) };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.encoded_size(@as(u32, @intFromEnum(self.*)));
+        return enc.encoded_size(@as(u32, @intFromEnum(self.*)));
     }
 };
 
@@ -149,21 +149,21 @@ pub const CriticalOptions = struct {
         /// this feature in their signature formats.
         @"verify-required",
 
-        pub const strings = proto.enum_to_str(Self.Tags);
+        pub const strings = enc.enum_to_str(Self.Tags);
 
         pub fn as_string(self: *const Self.Tags) []const u8 {
             return Tags.strings[@intFromEnum(self.*)];
         }
     };
 
-    pub inline fn parse(buf: []const u8) proto.Error!proto.Cont(CriticalOptions) {
-        const next, const ref = try proto.rfc4251.parse_string(buf);
+    pub inline fn parse(buf: []const u8) enc.Error!enc.Cont(CriticalOptions) {
+        const next, const ref = try enc.rfc4251.parse_string(buf);
 
         return .{ next, .{ .ref = ref } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.encoded_size(self.ref);
+        return enc.encoded_size(self.ref);
     }
 
     pub fn iter(self: *const Self) Self.Iterator {
@@ -177,10 +177,10 @@ pub const CriticalOptions = struct {
                 const opt = Self.is_valid_option(k) orelse
                     return null;
 
-                const next, const buf = proto.rfc4251.parse_string(ref[off.*..]) catch
+                const next, const buf = enc.rfc4251.parse_string(ref[off.*..]) catch
                     return null;
 
-                _, const value = proto.rfc4251.parse_string(buf) catch
+                _, const value = enc.rfc4251.parse_string(buf) catch
                     return null;
 
                 off.* += next;
@@ -240,21 +240,21 @@ pub const Extensions = struct {
         /// not present.
         @"permit-user-rc" = 0x01 << 5,
 
-        const strings = proto.enum_to_str(Tags);
+        const strings = enc.enum_to_str(Tags);
 
         pub inline fn as_string(self: *const Tags) []const u8 {
             return Self.strings[@intFromEnum(self.*)];
         }
     };
 
-    pub inline fn parse(buf: []const u8) proto.Error!proto.Cont(Extensions) {
-        const next, const ref = try proto.rfc4251.parse_string(buf);
+    pub inline fn parse(buf: []const u8) enc.Error!enc.Cont(Extensions) {
+        const next, const ref = try enc.rfc4251.parse_string(buf);
 
         return .{ next, .{ .ref = ref } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.encoded_size(self.ref);
+        return enc.encoded_size(self.ref);
     }
 
     pub fn iter(self: *const Self) Iterator {
@@ -302,14 +302,14 @@ const Principals = struct {
 
     pub const Iterator = GenericIterator(parse_fn);
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Principals) {
-        const next, const ref = try proto.rfc4251.parse_string(src);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Principals) {
+        const next, const ref = try enc.rfc4251.parse_string(src);
 
         return .{ next, .{ .ref = ref } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.encoded_size(self.ref);
+        return enc.encoded_size(self.ref);
     }
 
     pub fn iter(self: *const Self) Self.Iterator {
@@ -399,7 +399,7 @@ fn GenericCert(comptime M: type, comptime T: type) type {
         pub const Magic = M;
 
         fn from(src: []const u8) Error!Self {
-            return try proto.parse(Self, src);
+            return try enc.parse(Self, src);
         }
 
         pub fn from_pem(
@@ -426,7 +426,7 @@ fn GenericCert(comptime M: type, comptime T: type) type {
 
             inline for (std.meta.fields(Self)) |field| {
                 if (comptime !std.mem.eql(u8, "signature", field.name)) {
-                    ret += proto.encoded_size(@field(self, field.name));
+                    ret += enc.encoded_size(@field(self, field.name));
                 }
             }
 
@@ -445,15 +445,15 @@ pub const Rsa = GenericCert(MagicString(enum {
 
     const Self = @This();
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const e = try proto.rfc4251.parse_string(src);
-        const last, const n = try proto.rfc4251.parse_string(src[next..]);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const next, const e = try enc.rfc4251.parse_string(src);
+        const last, const n = try enc.rfc4251.parse_string(src[next..]);
 
         return .{ next + last, .{ .e = e, .n = n } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.struct_encoded_size(self);
+        return enc.struct_encoded_size(self);
     }
 });
 
@@ -467,15 +467,15 @@ pub const Ecdsa = GenericCert(MagicString(enum {
 
     const Self = @This();
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const curve = try proto.rfc4251.parse_string(src);
-        const last, const key = try proto.rfc4251.parse_string(src[next..]);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const next, const curve = try enc.rfc4251.parse_string(src);
+        const last, const key = try enc.rfc4251.parse_string(src[next..]);
 
         return .{ next + last, .{ .curve = curve, .pk = key } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.struct_encoded_size(self);
+        return enc.struct_encoded_size(self);
     }
 });
 
@@ -486,13 +486,13 @@ pub const Ed25519 = GenericCert(MagicString(enum {
 
     const Self = @This();
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const key = try proto.rfc4251.parse_string(src);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const next, const key = try enc.rfc4251.parse_string(src);
 
         return .{ next, .{ .pk = key } };
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.struct_encoded_size(self);
+        return enc.struct_encoded_size(self);
     }
 });

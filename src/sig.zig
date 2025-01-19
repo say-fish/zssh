@@ -4,15 +4,15 @@ const builtin = @import("builtin");
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
-const proto = @import("proto.zig");
+const enc = @import("enc.zig");
 
 // TODO: Error
 
 fn MagicString(comptime T: type) type {
-    return proto.GenericMagicString(
+    return enc.GenericMagicString(
         T,
-        proto.rfc4251.parse_string,
-        proto.rfc4251.encoded_size,
+        enc.rfc4251.parse_string,
+        enc.rfc4251.encoded_size,
     );
 }
 
@@ -38,12 +38,12 @@ pub const rfc8332 = struct {
         @"rsa-sha2-512",
     });
 
-    fn from(src: []const u8) proto.Error!Self {
-        return try proto.parse(Self, src);
+    fn from(src: []const u8) enc.Error!Self {
+        return try enc.parse(Self, src);
     }
 
-    pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const sig = try proto.rfc4251.parse_string(src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const next, const sig = try enc.rfc4251.parse_string(src);
 
         return .{ next, try Self.from(sig) };
     }
@@ -71,12 +71,12 @@ pub const rfc5656 = struct {
 
         const Blob = @This();
 
-        fn from(src: []const u8) proto.Error!Blob {
-            return try proto.parse(Blob, src);
+        fn from(src: []const u8) enc.Error!Blob {
+            return try enc.parse(Blob, src);
         }
 
-        pub fn parse(src: []const u8) proto.Error!proto.Cont(Blob) {
-            const next, const blob = try proto.rfc4251.parse_string(src);
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Blob) {
+            const next, const blob = try enc.rfc4251.parse_string(src);
 
             return .{ next, try Blob.from(blob) };
         }
@@ -89,12 +89,12 @@ pub const rfc5656 = struct {
         @"ecdsa-sha2-nistp512",
     });
 
-    fn from(src: []const u8) proto.Error!Self {
-        return try proto.parse(Self, src);
+    fn from(src: []const u8) enc.Error!Self {
+        return try enc.parse(Self, src);
     }
 
-    pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const sig = try proto.rfc4251.parse_string(src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const next, const sig = try enc.rfc4251.parse_string(src);
 
         return .{ next, try Self.from(sig) };
     }
@@ -111,21 +111,21 @@ pub const rfc8032 = struct {
 
     pub const Magic = MagicString(enum(u1) { @"ssh-ed25519" });
 
-    fn from(src: []const u8) proto.Error!Self {
-        return try proto.parse(Self, src);
+    fn from(src: []const u8) enc.Error!Self {
+        return try enc.parse(Self, src);
     }
 
-    pub fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const sig = try proto.rfc4251.parse_string(src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const next, const sig = try enc.rfc4251.parse_string(src);
 
         return .{ next, try Self.from(sig) };
     }
 };
 
 pub const SshSig = struct {
-    fn parse_fixed_string(src: []const u8) proto.Error!proto.Cont([6]u8) {
+    fn parse_fixed_string(src: []const u8) enc.Error!enc.Cont([6]u8) {
         if (src.len < 6) {
-            return proto.Error.MalformedString;
+            return enc.Error.MalformedString;
         }
 
         return .{ 6, src[0..6].* };
@@ -136,7 +136,7 @@ pub const SshSig = struct {
     }
 
     fn MagicPreamble(comptime T: type) type {
-        return proto.GenericMagicString(
+        return enc.GenericMagicString(
             T,
             parse_fixed_string,
             fixed_string_encoded_size,
@@ -172,7 +172,7 @@ pub const SshSig = struct {
     pub const HashAlgorithm = MagicString(enum { sha256, sha512 });
 
     fn from(src: []const u8) !Self {
-        return try proto.parse(Self, src);
+        return try enc.parse(Self, src);
     }
 
     pub fn from_bytes(src: []const u8) !Self {
@@ -237,7 +237,7 @@ pub const SshSig = struct {
         hmsg: []const u8,
 
         fn from(src: []const u8) !Blob {
-            return try proto.parse(Blob, src);
+            return try enc.parse(Blob, src);
         }
 
         pub fn from_bytes(src: []const u8) !Blob {
@@ -251,8 +251,8 @@ pub const SshSig = struct {
         hmsg: []const u8,
     ) !mem.ManagedWithRef(Blob) {
         const len = self.magic.encoded_size() +
-            proto.rfc4251.encoded_size(self.namespace) +
-            proto.rfc4251.encoded_size(self.reserved) +
+            enc.rfc4251.encoded_size(self.namespace) +
+            enc.rfc4251.encoded_size(self.reserved) +
             self.hash_algorithm.encoded_size() +
             @sizeOf(u32) + hmsg.len;
 
@@ -260,10 +260,10 @@ pub const SshSig = struct {
         errdefer fbw.deinit();
 
         try self.magic.serialize(fbw.writer());
-        try proto.encode_value(fbw.writer(), self.namespace);
-        try proto.encode_value(fbw.writer(), self.reserved);
+        try enc.encode_value(fbw.writer(), self.namespace);
+        try enc.encode_value(fbw.writer(), self.reserved);
         try self.hash_algorithm.serialize(fbw.writer());
-        try proto.encode([]const u8, fbw.writer(), hmsg);
+        try enc.encode([]const u8, fbw.writer(), hmsg);
 
         std.debug.assert(fbw.head == len);
 
@@ -294,14 +294,14 @@ pub const Sig = union(enum) {
         @"ssh-ed25519",
     });
 
-    pub fn parse(src: []const u8) proto.Error!proto.Cont(Sig) {
-        const next, const key = try proto.rfc4251.parse_string(src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Sig) {
+        const next, const key = try enc.rfc4251.parse_string(src);
 
         return .{ next, Self.from_bytes(key) catch return error.InvalidData };
     }
 
     pub fn from_bytes(src: []const u8) !Sig {
-        _, const magic = try proto.rfc4251.parse_string(src);
+        _, const magic = try enc.rfc4251.parse_string(src);
 
         return switch (try Magic.from_slice(magic)) {
             .@"rsa-sha2-256",

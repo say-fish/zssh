@@ -173,8 +173,8 @@ pub fn build(b: *std.Build) void {
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
-            .name = "proto",
-            .root_source_file = b.path("src/proto.zig"),
+            .name = "enc",
+            .root_source_file = b.path("src/enc.zig"),
             .target = target,
             .optimize = optimize,
             .use_lld = lld,

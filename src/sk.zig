@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const proto = @import("proto.zig");
+const enc = @import("enc.zig");
 const pem = @import("pem.zig");
 const mem = @import("mem.zig");
 const pk = @import("pk.zig");
@@ -13,13 +13,13 @@ pub const Error = error{
     /// was not successful, or data is corrupted. This is NOT an auth form
     /// error.
     InvalidChecksum,
-} || proto.Error || std.mem.Allocator.Error;
+} || enc.Error || std.mem.Allocator.Error;
 
 fn MagicString(comptime T: type) type {
-    return proto.GenericMagicString(
+    return enc.GenericMagicString(
         T,
-        proto.parse_null_terminated_str,
-        proto.null_terminated_str_encoded_size,
+        enc.parse_null_terminated_str,
+        enc.null_terminated_str_encoded_size,
     );
 }
 
@@ -67,7 +67,6 @@ pub fn decrypt_none(allocator: std.mem.Allocator, private_key_blob: []const u8, 
     return out;
 }
 
-// XXX: Move this to proto?!
 pub const Checksum = struct {
     value: u64,
 
@@ -78,8 +77,8 @@ pub const Checksum = struct {
             @as(u32, @truncate(value));
     }
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Self) {
-        const next, const checksum = try proto.rfc4251.parse_int(u64, src);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const next, const checksum = try enc.rfc4251.parse_int(u64, src);
 
         // XXX: This is not realy great
         if (!Self.check_checksum(checksum))
@@ -132,8 +131,8 @@ pub const Cipher = struct {
         return ret;
     }
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Cipher) {
-        const next, const name = try proto.rfc4251.parse_string(src);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Cipher) {
+        const next, const name = try enc.rfc4251.parse_string(src);
 
         inline for (comptime Self.ciphers) |cipher| {
             if (std.mem.eql(u8, name, cipher.name)) {
@@ -141,7 +140,7 @@ pub const Cipher = struct {
             }
         }
 
-        return proto.Error.InvalidData;
+        return enc.Error.InvalidData;
     }
 };
 
@@ -188,15 +187,15 @@ pub const Kdf = struct {
 
     const Self = @This();
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Kdf) {
-        const next, const kdf = try proto.rfc4251.parse_string(src);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Kdf) {
+        const next, const kdf = try enc.rfc4251.parse_string(src);
 
         if (kdf.len == 0)
             // FIXME: We should return an optional here, to do so need to
             // allow the generic parser to support optional types.
             return .{ next, undefined };
 
-        return .{ next, try proto.parse(Self, kdf) };
+        return .{ next, try enc.parse(Self, kdf) };
     }
 };
 
@@ -245,7 +244,7 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
                     );
                     errdefer allocator.free(private_blob);
 
-                    const key = try proto.parse(Pri, private_blob);
+                    const key = try enc.parse(Pri, private_blob);
 
                     return .{
                         .allocator = allocator,
@@ -259,7 +258,7 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
         }
 
         fn from(src: []const u8) Error!Self {
-            return try proto.parse(Self, src);
+            return try enc.parse(Self, src);
         }
 
         pub fn from_bytes(src: []const u8) Error!Self {
@@ -284,7 +283,7 @@ pub const Rsa = Sk(pk.Rsa, struct {
     p: []const u8,
     q: []const u8,
     comment: []const u8,
-    _pad: proto.Padding,
+    _pad: enc.Padding,
 });
 
 pub const Ecdsa = Sk(pk.Ecdsa, struct {
@@ -296,7 +295,7 @@ pub const Ecdsa = Sk(pk.Ecdsa, struct {
     // Private parts
     sk: []const u8,
     comment: []const u8,
-    _pad: proto.Padding,
+    _pad: enc.Padding,
 });
 
 pub const Ed25519 = Sk(pk.Ed25519, struct {
@@ -307,5 +306,5 @@ pub const Ed25519 = Sk(pk.Ed25519, struct {
     // Private parts
     sk: []const u8,
     comment: []const u8,
-    _pad: proto.Padding,
+    _pad: enc.Padding,
 });

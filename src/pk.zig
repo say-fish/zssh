@@ -2,7 +2,7 @@ const std = @import("std");
 
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
-const proto = @import("proto.zig");
+const enc = @import("enc.zig");
 
 pub const Error = error{
     /// This indicates, either: PEM corruption, DER corruption, or an
@@ -12,7 +12,7 @@ pub const Error = error{
     /// was not successful, or data is corrupted. This is NOT an auth form
     /// error.
     InvalidChecksum,
-} || proto.Error || std.mem.Allocator.Error;
+} || enc.Error || std.mem.Allocator.Error;
 
 // TODO: add support for FIDO2/U2F keys
 
@@ -47,10 +47,10 @@ pub const Pem = struct {
 };
 
 fn MagicString(comptime T: type) type {
-    return proto.GenericMagicString(
+    return enc.GenericMagicString(
         T,
-        proto.rfc4251.parse_string,
-        proto.rfc4251.encoded_size,
+        enc.rfc4251.parse_string,
+        enc.rfc4251.encoded_size,
     );
 }
 
@@ -64,7 +64,7 @@ pub const Rsa = struct {
     const Magic = MagicString(enum { @"ssh-rsa" });
 
     fn from(src: []const u8) Error!Rsa {
-        return try proto.parse(Self, src);
+        return try enc.parse(Self, src);
     }
 
     pub fn from_bytes(src: []const u8) Error!Rsa {
@@ -78,7 +78,7 @@ pub const Rsa = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.struct_encoded_size(self);
+        return enc.struct_encoded_size(self);
     }
 };
 
@@ -96,7 +96,7 @@ pub const Ecdsa = struct {
     });
 
     fn from(src: []const u8) Error!Ecdsa {
-        return try proto.parse(Self, src);
+        return try enc.parse(Self, src);
     }
 
     pub fn from_bytes(src: []const u8) Error!Ecdsa {
@@ -108,7 +108,7 @@ pub const Ecdsa = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.struct_encoded_size(self);
+        return enc.struct_encoded_size(self);
     }
 };
 
@@ -121,7 +121,7 @@ pub const Ed25519 = struct {
     pub const Magic = MagicString(enum { @"ssh-ed25519" });
 
     fn from(src: []const u8) Error!Ed25519 {
-        return try proto.parse(Self, src);
+        return try enc.parse(Self, src);
     }
 
     pub fn from_bytes(src: []const u8) Error!Ed25519 {
@@ -134,7 +134,7 @@ pub const Ed25519 = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return proto.struct_encoded_size(self);
+        return enc.struct_encoded_size(self);
     }
 };
 
@@ -153,14 +153,14 @@ pub const Pk = union(enum) {
         @"ssh-ed25519",
     });
 
-    pub inline fn parse(src: []const u8) proto.Error!proto.Cont(Pk) {
-        const next, const key = try proto.rfc4251.parse_string(src);
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Pk) {
+        const next, const key = try enc.rfc4251.parse_string(src);
 
         return .{ next, Self.from_bytes(key) catch return Error.InvalidData };
     }
 
     pub fn from_bytes(src: []const u8) !Self {
-        _, const magic = try proto.rfc4251.parse_string(src);
+        _, const magic = try enc.rfc4251.parse_string(src);
 
         return switch (try Magic.from_slice(magic)) {
             .@"ssh-rsa",
@@ -178,11 +178,11 @@ pub const Pk = union(enum) {
 
     pub fn encoded_size(self: *const Self) u32 {
         return switch (self.*) {
-            .rsa => |value| proto.encoded_size(value),
+            .rsa => |value| enc.encoded_size(value),
 
-            .ecdsa => |value| proto.encoded_size(value),
+            .ecdsa => |value| enc.encoded_size(value),
 
-            .ed25519 => |value| proto.encoded_size(value),
+            .ed25519 => |value| enc.encoded_size(value),
         };
     }
 };
