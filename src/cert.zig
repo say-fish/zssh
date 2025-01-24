@@ -170,25 +170,22 @@ pub const CriticalOptions = struct {
         return .{ .ref = self.ref, .off = 0 };
     }
 
-    pub const Iterator = GenericIterator(
-        struct {
-            // FIXME: Should return an error
-            inline fn parse_value(ref: []const u8, off: *usize, k: []const u8) ?CriticalOption {
-                const opt = Self.is_valid_option(k) orelse
-                    return null;
+    inline fn parse_value(ref: []const u8, off: *usize, k: []const u8) ?CriticalOption {
+        const opt = Self.is_valid_option(k) orelse
+            return null;
 
-                const next, const buf = enc.rfc4251.parse_string(ref[off.*..]) catch
-                    return null;
+        const next, const buf = enc.rfc4251.parse_string(ref[off.*..]) catch
+            return null;
 
-                _, const value = enc.rfc4251.parse_string(buf) catch
-                    return null;
+        _, const value = enc.rfc4251.parse_string(buf) catch
+            return null;
 
-                off.* += next;
+        off.* += next;
 
-                return .{ .kind = opt, .value = value };
-            }
-        }.parse_value,
-    );
+        return .{ .kind = opt, .value = value };
+    }
+
+    pub const Iterator = GenericIterator(parse_value);
 
     fn is_valid_option(opt: []const u8) ?CriticalOptions.Tags {
         for (Self.Tags.strings, 0..) |s, i|
@@ -446,10 +443,7 @@ pub const Rsa = GenericCert(MagicString(enum {
     const Self = @This();
 
     pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        const next, const e = try enc.rfc4251.parse_string(src);
-        const last, const n = try enc.rfc4251.parse_string(src[next..]);
-
-        return .{ next + last, .{ .e = e, .n = n } };
+        return try enc.parse_with_cont(Self, src);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -468,10 +462,7 @@ pub const Ecdsa = GenericCert(MagicString(enum {
     const Self = @This();
 
     pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        const next, const curve = try enc.rfc4251.parse_string(src);
-        const last, const key = try enc.rfc4251.parse_string(src[next..]);
-
-        return .{ next + last, .{ .curve = curve, .pk = key } };
+        return try enc.parse_with_cont(Self, src);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -487,9 +478,7 @@ pub const Ed25519 = GenericCert(MagicString(enum {
     const Self = @This();
 
     pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        const next, const key = try enc.rfc4251.parse_string(src);
-
-        return .{ next, .{ .pk = key } };
+        return try enc.parse_with_cont(Self, src);
     }
 
     pub fn encoded_size(self: *const Self) u32 {

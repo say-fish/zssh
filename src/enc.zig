@@ -61,7 +61,6 @@ pub fn GenericMagicString(
 
         pub fn parse(src: []const u8) Error!Cont(Self) {
             const next, const magic = try f(src);
-
             // Small hack, otherwise zig complains
             const ref = switch (comptime @typeInfo(@TypeOf(magic))) {
                 .array => &magic,
@@ -274,6 +273,14 @@ pub fn serialize(comptime T: type, writer: anytype, value: T) !void {
 }
 
 pub inline fn parse(comptime T: type, src: []const u8) Error!T {
+    const next, const ret = try parse_with_cont(T, src);
+
+    std.debug.assert(next == src.len);
+
+    return ret;
+}
+
+pub inline fn parse_with_cont(comptime T: type, src: []const u8) Error!Cont(T) {
     var ret: T = undefined;
 
     var i: usize = 0;
@@ -302,9 +309,7 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
         @field(ret, f.name) = val;
     }
 
-    std.debug.assert(i == src.len);
-
-    return ret;
+    return .{ i, ret };
 }
 
 const expect_equal = std.testing.expectEqual;

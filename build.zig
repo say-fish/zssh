@@ -8,7 +8,7 @@ const Tuple = std.meta.Tuple;
 
 const Allocator = std.mem.Allocator;
 
-const PERF_EVENTS: []const u8 = "cache-references,cache-misses,cycles,instructions,branches,faults,migrations";
+const PERF_EVENTS: []const u8 = "cache-references,cache-misses,cycles,instructions,branches,faults,migrations,macro_ops_retired";
 
 const TEST_ASSETS_PATH: []const u8 = "assets/";
 
@@ -136,7 +136,7 @@ fn add_perf(b: *std.Build, step: *std.Build.Step, perf: Perf) !void {
         add_assets(b, perf_exe, assets);
 
     const run_perf = if (perf.record)
-        b.addSystemCommand(&.{ "perf", "record", "-e", PERF_EVENTS, "-d", "--" })
+        b.addSystemCommand(&.{ "perf", "record", "-e", PERF_EVENTS, "--" })
     else
         b.addSystemCommand(&.{ "perf", "stat", "-d", "--" });
 
@@ -286,7 +286,6 @@ pub fn build(b: *std.Build) void {
 
         const doc_server_step = b.step("doc-server", "Start doc server");
         {
-            std.debug.print("{s}", .{install_docs.options.install_subdir});
             const run_doc = b.addSystemCommand(&.{ "python3", "-m", "http.server", "-d" });
 
             run_doc.addDirectoryArg(install_docs.options.source_dir);

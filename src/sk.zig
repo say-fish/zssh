@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const enc = @import("enc.zig");
-const pem = @import("pem.zig");
 const mem = @import("mem.zig");
+const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 
 pub const Error = error{
@@ -211,6 +211,29 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
 
         const Self = @This();
 
+        const Pk = Pub;
+        const Sk = MakeSk(Pri);
+
+        fn MakeSk(comptime T: type) type {
+            if (std.meta.declarations(T).len != 0)
+                @compileError("Cannot flatten structs with declarations (see: #6709)");
+
+            const A = struct { checksum: Checksum };
+
+            const S = struct { comment: []const u8, _pad: enc.Padding };
+
+            const fields = std.meta.fields(A) ++ std.meta.fields(T) ++ std.meta.fields(S);
+
+            const ret: std.builtin.Type.Struct = .{
+                .decls = &.{},
+                .fields = fields,
+                .is_tuple = false,
+                .layout = .auto,
+            };
+
+            return @Type(@unionInit(std.builtin.Type, "struct", ret));
+        }
+
         pub const Magic = MagicString(enum { @"openssh-key-v1" });
 
         /// Returns `true` if the `private_key_blob` is encrypted, i.e.,
@@ -219,7 +242,7 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
             return !std.mem.eql(u8, self.cipher.name, "none");
         }
 
-        pub fn get_public_key(self: *const Self) !Pub {
+        pub fn get_public_key(self: *const Self) !Pk {
             if (!@hasDecl(Pub, "from_bytes"))
                 @compileError("Type `Pub` does not declare `from_bytes([]const u8)`");
 
@@ -230,7 +253,8 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
             self: *const Self,
             allocator: std.mem.Allocator,
             passphrase: ?[]const u8,
-        ) !mem.ManagedSecret(Pri) {
+        ) !mem.ManagedSecret(Self.Sk) {
+            _ = Self.Sk;
             if (self.is_encrypted() and passphrase == null)
                 return error.MissingPassphrase;
 
@@ -244,7 +268,7 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
                     );
                     errdefer allocator.free(private_blob);
 
-                    const key = try enc.parse(Pri, private_blob);
+                    const key = try enc.parse(Self.Sk, private_blob);
 
                     return .{
                         .allocator = allocator,
@@ -271,40 +295,39 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
     };
 }
 
-pub const Rsa = Sk(pk.Rsa, struct {
-    checksum: Checksum,
-    kind: []const u8,
-    // Public key parts
-    n: []const u8,
-    e: []const u8,
-    // Private key parts
-    d: []const u8,
-    i: []const u8,
-    p: []const u8,
-    q: []const u8,
-    comment: []const u8,
-    _pad: enc.Padding,
-});
+pub const wire = struct {
+    pub const Rsa = struct {
+        kind: []const u8,
+        // Public key parts
+        n: []const u8,
+        e: []const u8,
+        // Private key parts
+        d: []const u8,
+        i: []const u8,
+        p: []const u8,
+        q: []const u8,
+    };
 
-pub const Ecdsa = Sk(pk.Ecdsa, struct {
-    checksum: u64,
-    kind: []const u8,
-    // Public parts
-    curve: []const u8,
-    pk: []const u8,
-    // Private parts
-    sk: []const u8,
-    comment: []const u8,
-    _pad: enc.Padding,
-});
+    pub const Ecdsa = struct {
+        kind: []const u8,
+        // Public parts
+        curve: []const u8,
+        pk: []const u8,
+        // Private parts
+        sk: []const u8,
+    };
 
-pub const Ed25519 = Sk(pk.Ed25519, struct {
-    checksum: u64,
-    kind: []const u8,
-    // Public parts
-    pk: []const u8,
-    // Private parts
-    sk: []const u8,
-    comment: []const u8,
-    _pad: enc.Padding,
-});
+    pub const Ed25519 = struct {
+        kind: []const u8,
+        // Public parts
+        pk: []const u8,
+        // Private parts
+        sk: []const u8,
+    };
+};
+
+pub const Rsa = Sk(pk.Rsa, wire.Rsa);
+
+pub const Ecdsa = Sk(pk.Ecdsa, wire.Ecdsa);
+
+pub const Ed25519 = Sk(pk.Ed25519, wire.Ed25519);

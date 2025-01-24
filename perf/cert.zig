@@ -5,7 +5,7 @@ const zssh = @import("zssh");
 const Ed25519 = zssh.cert.Ed25519;
 const Pem = zssh.cert.Pem;
 
-const MAX_RUNS: usize = 0x01 << 26;
+const MAX_RUNS: usize = 0x01 << 30;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

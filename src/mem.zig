@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const builtin = @import("builtin");
+
 pub const FixedBufferWriter = struct {
     allocator: std.mem.Allocator,
     head: usize = 0,
@@ -96,7 +98,7 @@ pub fn Unmanaged(comptime U: type) type {
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
 
-test "can allocate " {
+test FixedBufferWriter {
     var fbw = try FixedBufferWriter.init(std.testing.allocator, 32);
     defer fbw.deinit();
 

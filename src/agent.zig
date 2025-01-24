@@ -7,6 +7,7 @@
 
 const std = @import("std");
 
+const sk = @import("sk.zig");
 const pk = @import("pk.zig");
 const enc = @import("enc.zig");
 
@@ -37,7 +38,7 @@ pub const Client = union(enum(u8)) {
     /// SSH_AGENTC_SIGN_REQUEST = 13
     sign_request: SignRequest = 13,
     /// SSH_AGENTC_ADD_IDENTITY = 17
-    add_idntity: AddIdentity = 17,
+    add_identity: AddIdentity = 17,
     /// SSH_AGENTC_REMOVE_IDENTITY = 18
     remove_identity: RemoveIdentity = 18,
     /// SSH_AGENTC_REMOVE_ALL_IDENTITIES = 19
@@ -56,6 +57,62 @@ pub const Client = union(enum(u8)) {
     add_smartcard_key_constrained: AddIdConstrained = 26,
     /// SSH_AGENTC_EXTENSION = 27
     extension: Extension = 27,
+
+    const Self = @This();
+
+    pub fn from_bytes(src: []const u8) !Self {
+        if (src.len < @sizeOf(u32))
+            return error.MessageTooShort;
+
+        const msg_len = std.mem.readInt(u32, src[0..4], .big);
+
+        if (msg_len + @sizeOf(u32) != src.len)
+            return error.MsgLenMismatch;
+
+        return try decode(Client, src[4 .. 4 + msg_len]);
+    }
+};
+
+pub const Sk = union(enum) {
+    rsa: sk.wire.Rsa,
+    ecdsa: sk.wire.Ecdsa,
+    ed25519: sk.wire.Ed25519,
+
+    const Self = @This();
+
+    const Magic = pk.Pk.Magic;
+
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        const magic = Magic.from_bytes(src) catch return error.InvalidData;
+
+        switch (magic.value) {
+            .@"ssh-rsa",
+            => {
+                const next, const key =
+                    try enc.parse_with_cont(sk.wire.Rsa, src);
+
+                return .{ next, .{ .rsa = key } };
+            },
+
+            .@"ecdsa-sha2-nistp256",
+            .@"ecdsa-sha2-nistp384",
+            .@"ecdsa-sha2-nistp521",
+            => {
+                const next, const key =
+                    try enc.parse_with_cont(sk.wire.Ecdsa, src);
+
+                return .{ next, .{ .ecdsa = key } };
+            },
+
+            .@"ssh-ed25519",
+            => {
+                const next, const key =
+                    try enc.parse_with_cont(sk.wire.Ed25519, src);
+
+                return .{ next, .{ .ed25519 = key } };
+            },
+        }
+    }
 };
 
 pub fn decode(comptime K: type, src: []const u8) !K {
@@ -63,24 +120,27 @@ pub fn decode(comptime K: type, src: []const u8) !K {
 
     const next, const kind = try enc.rfc4251.parse_int(u8, src);
 
+    const e: Tag = std.meta.intToEnum(Tag, kind) catch
+        return error.InvalidMsgType;
+
     @setEvalBranchQuota(5000);
 
     inline for (comptime std.meta.fields(K)) |field| {
-        const e = std.meta.intToEnum(Tag, kind) catch
-            return error.InvalidMsgType;
-
         if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
-            return @unionInit(K, field.name, field.type.from_bytes(src[next..]));
+            return @unionInit(K, field.name, try field.type.from_bytes(src[next..]));
         }
     }
 
+    // On all other cases we WILL fail on `intToEnum` but zig cannot prove that
+    // this invariant holds.
+    // comptime unreachable;
     unreachable;
 }
 
 const ExtensionFailure = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) Self {
+    pub fn from_bytes(src: []const u8) !Self {
         std.debug.assert(src.len == 0);
 
         return .{};
@@ -90,7 +150,7 @@ const ExtensionFailure = struct {
 const Failure = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) Self {
+    pub fn from_bytes(src: []const u8) !Self {
         std.debug.assert(src.len == 0);
 
         return .{};
@@ -100,7 +160,7 @@ const Failure = struct {
 const Success = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) Self {
+    pub fn from_bytes(src: []const u8) !Self {
         std.debug.assert(src.len == 0);
 
         return .{};
@@ -110,7 +170,7 @@ const Success = struct {
 const RequestIdentities = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) Self {
+    pub fn from_bytes(src: []const u8) !Self {
         std.debug.assert(src.len == 0);
 
         return .{};
@@ -118,13 +178,13 @@ const RequestIdentities = struct {
 };
 
 const AddIdentity = struct {
-    key: []const u8, // TODO:
+    key: Sk, // TODO:
     comment: []const u8,
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
-        return undefined;
+    pub fn from_bytes(src: []const u8) !Self {
+        return try enc.parse(Self, src);
     }
 };
 
@@ -135,7 +195,7 @@ const AddIdConstrained = struct {
 
     const Self = @This();
 
-    fn from_bytes(_: []const u8) Self {
+    fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
@@ -146,7 +206,7 @@ const AddSmartCardKey = struct {
 
     const Self = @This();
 
-    fn from_bytes(_: []const u8) Self {
+    fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
@@ -162,7 +222,7 @@ const RemoveIdentity = struct {
 
     const Self = @This();
 
-    fn from_bytes(_: []const u8) Self {
+    fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
@@ -170,7 +230,7 @@ const RemoveIdentity = struct {
 const RemoveAllIdentities = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) Self {
+    pub fn from_bytes(src: []const u8) !Self {
         std.debug.assert(src.len == 0);
 
         return .{};
@@ -184,7 +244,7 @@ const RemoveSmartcardKey = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
+    pub fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
@@ -194,7 +254,7 @@ const IdentitiesAnswer = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
+    pub fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 
@@ -212,8 +272,8 @@ const SignRequest = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
-        return undefined;
+    pub fn from_bytes(src: []const u8) !Self {
+        return try enc.parse(Self, src);
     }
 
     // TODO: 3.6.1. Signature flags
@@ -226,7 +286,7 @@ const SignResponse = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
+    pub fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
@@ -236,7 +296,7 @@ const Lock = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
+    pub fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
@@ -246,7 +306,7 @@ const Unlock = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
+    pub fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
@@ -257,7 +317,7 @@ const Extension = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) Self {
+    pub fn from_bytes(_: []const u8) !Self {
         return undefined;
     }
 };
