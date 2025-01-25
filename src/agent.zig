@@ -2,7 +2,7 @@
 //! > Clients (and possibly servers) can invoke the agent via this protocol to
 //! > perform operations using public and private keys held in the agent.
 //!
-//! See: ttps://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent
+//! See: https://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent
 //!      https://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent#name-security-considerations
 
 const std = @import("std");
@@ -22,23 +22,19 @@ fn msg_from_bytes(comptime T: type, src: []const u8) !T {
     if (msg_len + @sizeOf(u32) != src.len)
         return error.MsgLenMismatch;
 
-    return try decode(T, src[@sizeOf(u32) .. @sizeOf(u32) + msg_len]);
+    const decoded_len, const msg =
+        try decode(T, src[@sizeOf(u32) .. @sizeOf(u32) + msg_len]);
+
+    std.debug.assert(decoded_len == msg_len);
+
+    return msg;
 }
-
-/// The key constraint extension supports destination- and forwarding path-
-/// restricted keys. It may be attached as a constraint when keys or
-/// smartcard keys are added to an agent.
-//restrict_destination: RestrictDestination,
-
-/// This key constraint allows communication to an agent of the maximum
-/// number of signatures that may be made with an XMSS key.
-//max_signatures: MaxSignatures,
 
 // TODO: 3.2.7. Key Constraints
 // SSH_AGENT_CONSTRAIN_LIFETIME                    1
 // SSH_AGENT_CONSTRAIN_CONFIRM                     2
 // SSH_AGENT_CONSTRAIN_EXTENSION                   255
-//
+
 // TODO: 3.8.1. Query extension
 pub const Agent = union(enum(u8)) {
     /// SSH_AGENT_FAILURE = 5,
@@ -121,11 +117,13 @@ const openssh_extensions = struct {
         /// with private keys as they are loaded from a PKCS#11 token.
         associated_certs: AssociatedCerts,
 
+        const Self = @This();
+
         const RestrictDestination = struct {};
         const MaxSignatures = struct {};
         const AssociatedCerts = struct {};
 
-        pub fn from_bytes(_: []const u8) !Constraints {
+        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
             @panic("TODO:");
             //return enc.parse(Constraints, src);
         }
@@ -174,19 +172,23 @@ pub const Sk = union(enum) {
     }
 };
 
-pub fn decode(comptime K: type, src: []const u8) !K {
-    const Tag = std.meta.Tag(K);
+// TODO: Move this to enc
+pub fn decode(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
+    const Tag = comptime std.meta.Tag(T);
+
+    // @compileLog(Tag);
 
     const next, const kind = try enc.rfc4251.parse_int(u8, src);
 
-    const e: Tag = std.meta.intToEnum(Tag, kind) catch
-        return error.InvalidMsgType;
+    const e = std.meta.intToEnum(Tag, kind) catch
+        return error.InvalidData;
 
     @setEvalBranchQuota(5000);
 
-    inline for (comptime std.meta.fields(K)) |field| {
+    inline for (comptime std.meta.fields(T)) |field| {
         if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
-            return @unionInit(K, field.name, try field.type.from_bytes(src[next..]));
+            const final, const msg = field.type.parse(src[next..]) catch return error.InvalidData;
+            return .{ next + final, @unionInit(T, field.name, msg) };
         }
     }
 
@@ -199,40 +201,40 @@ pub fn decode(comptime K: type, src: []const u8) !K {
 const ExtensionFailure = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         std.debug.assert(src.len == 0);
 
-        return .{};
+        return .{ 0, .{} };
     }
 };
 
 const Failure = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         std.debug.assert(src.len == 0);
 
-        return .{};
+        return .{ 0, .{} };
     }
 };
 
 const Success = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         std.debug.assert(src.len == 0);
 
-        return .{};
+        return .{ 0, .{} };
     }
 };
 
 const RequestIdentities = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         std.debug.assert(src.len == 0);
 
-        return .{};
+        return .{ 0, .{} };
     }
 };
 
@@ -242,12 +244,12 @@ const AddIdentity = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
-        return try enc.parse(Self, src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
     }
 };
 
-const AddIdConstrained = struct {
+pub const AddIdConstrained = struct {
     key: Sk, // TODO:
     comment: []const u8,
     constraints: Constraints,
@@ -275,91 +277,87 @@ const AddIdConstrained = struct {
         extension: openssh_extensions.Constraints = 255,
 
         pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraint) {
-            std.debug.print("{X}\n", .{src});
-            // FIXME: Move this to enc
-            const constraint = decode(Constraint, src) catch
-                return error.InvalidData; // FIXME:
-
-            std.debug.print("{X}\n", .{src});
-            return .{ src.len, constraint };
+            return try decode(Constraint, src);
         }
     };
 
     pub const Lifetime = struct {
         sec: u32,
 
-        pub fn from_bytes(src: []const u8) !Lifetime {
-            return enc.parse(Lifetime, src);
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Lifetime) {
+            return try enc.parse_with_cont(Lifetime, src);
         }
     };
 
     pub const Confirm = struct {
-        pub fn from_bytes(src: []const u8) !Confirm {
-            return enc.parse(Confirm, src);
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Confirm) {
+            std.debug.assert(src.len == 0);
+
+            return .{ 0, .{} };
         }
     };
 
-    fn from_bytes(src: []const u8) !Self {
-        return enc.parse(Self, src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
     }
 };
 
-const AddSmartCardKey = struct {
+pub const AddSmartCardKey = struct {
     id: []const u8,
     pin: []const u8,
 
     const Self = @This();
 
-    fn from_bytes(_: []const u8) !Self {
+    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
         @panic("TODO: AddSmartCardKey is not implemented");
     }
 };
 
-const AddSmartCardKeyConstrained = struct {
+pub const AddSmartCardKeyConstrained = struct {
     id: []const u8,
     pin: []const u8,
     constraint: []const u8, // TODO: Type
 
     const Self = @This();
 
-    fn from_bytes(_: []const u8) !Self {
+    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
         @panic("TODO: AddSmartCardKeyConstrained is not implemented");
     }
 };
 
-const RemoveIdentity = struct {
+pub const RemoveIdentity = struct {
     key: pk.Pk,
 
     const Self = @This();
 
-    fn from_bytes(src: []const u8) !Self {
-        return try enc.parse(Self, src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
     }
 };
 
-const RemoveAllIdentities = struct {
+pub const RemoveAllIdentities = struct {
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         std.debug.assert(src.len == 0);
 
-        return .{};
+        return .{ 0, .{} };
     }
 };
 
-const RemoveSmartcardKey = struct {
+pub const RemoveSmartcardKey = struct {
     /// opaque identifier for the smartcard reader
     reader_id: []const u8,
     PIN: []const u8,
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) !Self {
+    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
         @panic("TODO: RemoveSmartcardKey is not implemented");
     }
 };
 
-const IdentitiesAnswer = struct {
+pub const IdentitiesAnswer = struct {
     nkeys: u32,
     keys: ?[]const u8,
 
@@ -380,11 +378,14 @@ const IdentitiesAnswer = struct {
         return if (self.keys) |keys| .{ .ref = keys } else null;
     }
 
-    pub fn from_bytes(src: []const u8) !Self {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         // No keys is explicit zero
         const next, const nkeys = try enc.rfc4251.parse_int(u32, src);
 
-        return .{ .nkeys = nkeys, .keys = if (nkeys != 0) src[next..] else null };
+        return .{ src.len, .{
+            .nkeys = nkeys,
+            .keys = if (nkeys != 0) src[next..] else null,
+        } };
     }
 };
 
@@ -395,8 +396,8 @@ const SignRequest = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
-        return try enc.parse(Self, src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
     }
 
     // TODO: 3.6.1. Signature flags
@@ -409,8 +410,8 @@ const SignResponse = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
-        return try enc.parse(Self, src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
     }
 };
 
@@ -419,8 +420,8 @@ const Lock = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
-        return try enc.parse(Self, src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
     }
 };
 
@@ -429,8 +430,8 @@ const Unlock = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(src: []const u8) !Self {
-        return try enc.parse(Self, src);
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
     }
 };
 
@@ -440,7 +441,7 @@ const Extension = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) !Self {
+    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
         @panic("TODO: Extension is not implemented");
     }
 };
