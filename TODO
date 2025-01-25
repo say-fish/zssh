@@ -1,6 +1,7 @@
 - Support knownhosts
-- Windows support 😂
 - `zig build dist`
 - Support SSH revocation lists
 - Fuzz
+- PROTOCOL
 - Support for FIDO2/U2F keys (see PROTOCOL.u2f)
+- Windows support 😂
