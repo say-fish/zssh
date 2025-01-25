@@ -2,7 +2,7 @@
 //! > Clients (and possibly servers) can invoke the agent via this protocol to
 //! > perform operations using public and private keys held in the agent.
 //!
-//! See: https://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent
+//! See: ttps://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent
 //!      https://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent#name-security-considerations
 
 const std = @import("std");
@@ -12,6 +12,27 @@ const sk = @import("sk.zig");
 
 const enc = @import("enc.zig");
 const sig = @import("sig.zig");
+
+fn msg_from_bytes(comptime T: type, src: []const u8) !T {
+    if (src.len < @sizeOf(u32))
+        return error.MessageTooShort;
+
+    const msg_len = std.mem.readInt(u32, src[0..@sizeOf(u32)], .big);
+
+    if (msg_len + @sizeOf(u32) != src.len)
+        return error.MsgLenMismatch;
+
+    return try decode(T, src[@sizeOf(u32) .. @sizeOf(u32) + msg_len]);
+}
+
+/// The key constraint extension supports destination- and forwarding path-
+/// restricted keys. It may be attached as a constraint when keys or
+/// smartcard keys are added to an agent.
+//restrict_destination: RestrictDestination,
+
+/// This key constraint allows communication to an agent of the maximum
+/// number of signatures that may be made with an XMSS key.
+//max_signatures: MaxSignatures,
 
 // TODO: 3.2.7. Key Constraints
 // SSH_AGENT_CONSTRAIN_LIFETIME                    1
@@ -36,15 +57,7 @@ pub const Agent = union(enum(u8)) {
     const Self = @This();
 
     pub fn from_bytes(src: []const u8) !Self {
-        if (src.len < @sizeOf(u32))
-            return error.MessageTooShort;
-
-        const msg_len = std.mem.readInt(u32, src[0..4], .big);
-
-        if (msg_len + @sizeOf(u32) != src.len)
-            return error.MsgLenMismatch;
-
-        return try decode(Self, src[4 .. 4 + msg_len]);
+        return try msg_from_bytes(Self, src);
     }
 };
 
@@ -77,16 +90,46 @@ pub const Client = union(enum(u8)) {
     const Self = @This();
 
     pub fn from_bytes(src: []const u8) !Self {
-        if (src.len < @sizeOf(u32))
-            return error.MessageTooShort;
-
-        const msg_len = std.mem.readInt(u32, src[0..4], .big);
-
-        if (msg_len + @sizeOf(u32) != src.len)
-            return error.MsgLenMismatch;
-
-        return try decode(Self, src[4 .. 4 + msg_len]);
+        return try msg_from_bytes(Self, src);
     }
+};
+
+/// OpenSSH's extensions to the agent protocol.
+const openssh_extensions = struct {
+    const Agent = union(enum) {
+        /// This extension allows a ssh client to bind an agent connection to a
+        /// particular SSH session identifier as derived from the initial key
+        /// exchange (as per RFC4253 section 7.2) and the host key used for that
+        /// exchange. This binding is verifiable at the agent by including the
+        /// initial KEX signature made by the host key.
+        session_bind: SessionBind,
+
+        const SessionBind = struct {};
+    };
+
+    const Constraints = union(enum) {
+        /// This key constraint extension supports destination- and forwarding path-
+        /// restricted keys. It may be attached as a constraint when keys or
+        /// smartcard keys are added to an agent.
+        restrict_destination: RestrictDestination,
+
+        /// This key constraint allows communication to an agent of the maximum
+        /// number of signatures that may be made with an XMSS key.
+        max_signatures: MaxSignatures,
+
+        /// This key constraint extension allows certificates to be associated
+        /// with private keys as they are loaded from a PKCS#11 token.
+        associated_certs: AssociatedCerts,
+
+        const RestrictDestination = struct {};
+        const MaxSignatures = struct {};
+        const AssociatedCerts = struct {};
+
+        pub fn from_bytes(_: []const u8) !Constraints {
+            @panic("TODO:");
+            //return enc.parse(Constraints, src);
+        }
+    };
 };
 
 pub const Sk = union(enum) {
@@ -205,14 +248,59 @@ const AddIdentity = struct {
 };
 
 const AddIdConstrained = struct {
-    key: []const u8, // TODO:
+    key: Sk, // TODO:
     comment: []const u8,
-    constraint: []const u8, // TODO: Type
+    constraints: Constraints,
 
     const Self = @This();
 
-    fn from_bytes(_: []const u8) !Self {
-        @panic("TODO: AddIdConstrained is not implemented");
+    pub const Constraints = struct {
+        ref: []const u8,
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraints) {
+            // TODO: Check for null
+            return try .{ src.len, .{ .ref = src } };
+        }
+
+        pub const Iterator = enc.GenericIterator(Constraint);
+
+        pub fn iter(self: *const Constraints) Iterator {
+            return .{ .ref = self.ref };
+        }
+    };
+
+    pub const Constraint = union(enum(u8)) {
+        lifetime: Lifetime = 1,
+        confirm: Confirm = 2,
+        extension: openssh_extensions.Constraints = 255,
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraint) {
+            std.debug.print("{X}\n", .{src});
+            // FIXME: Move this to enc
+            const constraint = decode(Constraint, src) catch
+                return error.InvalidData; // FIXME:
+
+            std.debug.print("{X}\n", .{src});
+            return .{ src.len, constraint };
+        }
+    };
+
+    pub const Lifetime = struct {
+        sec: u32,
+
+        pub fn from_bytes(src: []const u8) !Lifetime {
+            return enc.parse(Lifetime, src);
+        }
+    };
+
+    pub const Confirm = struct {
+        pub fn from_bytes(src: []const u8) !Confirm {
+            return enc.parse(Confirm, src);
+        }
+    };
+
+    fn from_bytes(src: []const u8) !Self {
+        return enc.parse(Self, src);
     }
 };
 
