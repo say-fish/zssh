@@ -5,7 +5,7 @@ const zssh = @import("zssh");
 const Ed25519 = zssh.cert.Ed25519;
 const Pem = zssh.cert.Pem;
 
-const MAX_RUNS: usize = 0x01 << 30;
+const MAX_RUNS: usize = 0x01 << 26;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -24,6 +24,23 @@ pub fn main() !void {
     for (0..MAX_RUNS) |_| {
         const cert = try Ed25519.from_bytes(der.data);
 
+        {
+            var it = cert.critical_options.iter();
+
+            while (try it.next()) |opt| {
+                std.mem.doNotOptimizeAway(opt);
+            }
+        }
+        {
+            var it = cert.valid_principals.iter();
+
+            while (try it.next()) |principal| {
+                std.mem.doNotOptimizeAway(principal);
+            }
+        }
+
+        std.mem.doNotOptimizeAway(try cert.extensions.to_bitflags());
+
         std.mem.doNotOptimizeAway(cert);
     }
 
@@ -32,6 +49,9 @@ pub fn main() !void {
     std.debug.print("Parsed SSH cert, {} times\n", .{MAX_RUNS});
     std.debug.print(
         "`.from_bytes` took ~= {}ns ({} certs/s)\n",
-        .{ elapsed / MAX_RUNS, 1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS) },
+        .{
+            elapsed / MAX_RUNS,
+            1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS),
+        },
     );
 }

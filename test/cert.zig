@@ -1,13 +1,15 @@
 const std = @import("std");
 
 const zssh = @import("zssh");
+
 const Cert = zssh.cert.Cert;
 const Pem = zssh.cert.Pem;
+const Rsa = zssh.cert.Rsa;
 
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
-const expect_error = std.testing.expectError;
 const expect_equal_strings = std.testing.expectEqualStrings;
+const expect_error = std.testing.expectError;
 
 fn verify_cert(cert: anytype) !void {
     try expect_equal(2, cert.serial);
@@ -129,15 +131,13 @@ test "verify ed25519 cert" {
 
 test "extensions iterator" {
     // Reference
-    const extensions = [_]zssh.cert.Extensions.Tags{
+    const extensions = [_]zssh.cert.Extensions.Kind{
         .@"permit-X11-forwarding",
         .@"permit-agent-forwarding",
         .@"permit-port-forwarding",
         .@"permit-pty",
         .@"permit-user-rc",
     };
-
-    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(@embedFile("rsa-cert.pub"));
 
@@ -148,16 +148,15 @@ test "extensions iterator" {
 
     var it = cert.extensions.iter();
 
-    inline for (comptime extensions) |extension| {
-        try expect_equal(extension, (try it.next()).?);
+    inline for (comptime extensions) |refrence| {
+        try expect_equal(refrence, try it.next() orelse return error.Fail);
     }
 
     try expect(it.done());
 }
 
 test "extensions to bitflags" {
-    const Ext = zssh.cert.Extensions.Tags;
-    const Rsa = zssh.cert.Rsa;
+    const Kind = zssh.cert.Extensions.Kind;
 
     const pem = try Pem.parse(@embedFile("rsa-cert.pub"));
 
@@ -167,11 +166,11 @@ test "extensions to bitflags" {
     const cert = try Rsa.from_bytes(der.data);
 
     try expect_equal(
-        @intFromEnum(Ext.@"permit-agent-forwarding") |
-            @intFromEnum(Ext.@"permit-X11-forwarding") |
-            @intFromEnum(Ext.@"permit-user-rc") |
-            @intFromEnum(Ext.@"permit-port-forwarding") |
-            @intFromEnum(Ext.@"permit-pty"),
+        @intFromEnum(Kind.@"permit-agent-forwarding") |
+            @intFromEnum(Kind.@"permit-X11-forwarding") |
+            @intFromEnum(Kind.@"permit-user-rc") |
+            @intFromEnum(Kind.@"permit-port-forwarding") |
+            @intFromEnum(Kind.@"permit-pty"),
         try cert.extensions.to_bitflags(),
     );
 }
@@ -184,8 +183,6 @@ test "multiple valid principals iterator" {
         "baz",
     };
 
-    const Rsa = zssh.cert.Rsa;
-
     const pem = try Pem.parse(@embedFile("multiple-principals-cert.pub"));
 
     var der = try pem.decode(std.testing.allocator);
@@ -195,8 +192,10 @@ test "multiple valid principals iterator" {
 
     var it = cert.valid_principals.iter();
 
-    for (valid_principals) |principal| {
-        try expect(std.mem.eql(u8, principal, (try it.next()).?.value));
+    for (valid_principals) |reference| {
+        const principal = try it.next() orelse return error.Fail;
+
+        try expect_equal_strings(reference, principal.value);
     }
 
     try expect(it.done());
@@ -206,10 +205,8 @@ test "critical options iterator" {
     // Reference
     const critical_options = [_]zssh.cert.Critical.Option{.{
         .kind = .@"force-command",
-        .values = "ls -la", // FIXME:
+        .value = "ls -la", // FIXME:
     }};
-
-    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(@embedFile("force-command-cert.pub"));
     var der = try pem.decode(std.testing.allocator);
@@ -220,11 +217,10 @@ test "critical options iterator" {
     var it = cert.critical_options.iter();
 
     inline for (comptime critical_options) |critical_option| {
-        const opt = (try it.next()).?;
+        const opt = try it.next() orelse return error.Fail;
 
         try expect_equal(critical_option.kind, opt.kind);
-        var value_iter = opt.iter();
-        try expect_equal_strings(critical_option.values, (try value_iter.next()).?.value);
+        try expect_equal_strings(critical_option.value, opt.value);
     }
 
     try expect(it.done());
@@ -235,15 +231,13 @@ test "multiple critical options iterator" {
     const critical_options = [_]zssh.cert.Critical.Option{
         .{
             .kind = .@"force-command",
-            .values = "ls -la",
+            .value = "ls -la",
         },
         .{
             .kind = .@"source-address",
-            .values = "198.51.100.0/24,203.0.113.0/26",
+            .value = "198.51.100.0/24,203.0.113.0/26",
         },
     };
-
-    const Rsa = zssh.cert.Rsa;
 
     const pem = try Pem.parse(
         @embedFile("multiple-critical-options-cert.pub"),
@@ -255,12 +249,11 @@ test "multiple critical options iterator" {
 
     var it = cert.critical_options.iter();
 
-    inline for (comptime critical_options) |critical_option| {
-        const opt = (try it.next()).?;
+    inline for (comptime critical_options) |reference| {
+        const opt = try it.next() orelse return error.Fail;
 
-        try expect_equal(critical_option.kind, opt.kind);
-        var value_iter = opt.iter();
-        try expect_equal_strings(critical_option.values, (try value_iter.next()).?.value);
+        try expect_equal(reference.kind, opt.kind);
+        try expect_equal_strings(reference.value, opt.value);
     }
 
     try expect(it.done());

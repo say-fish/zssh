@@ -53,10 +53,10 @@ pub fn GenericMagicString(
         const Self = @This();
         pub const Value = T;
 
-        const strings = enum_to_str(T);
+        const STRINGS = enum_to_str(T);
 
         pub fn as_string(self: *const Self) []const u8 {
-            return strings[@intFromEnum(self.value)];
+            return STRINGS[@intFromEnum(self.value)];
         }
 
         pub fn parse(src: []const u8) Error!Cont(Self) {
@@ -67,21 +67,18 @@ pub fn GenericMagicString(
                 else => magic,
             };
 
-            for (Self.strings, 0..) |s, i| {
-                if (std.mem.eql(u8, s, ref)) {
-                    return .{ next, .{ .value = @enumFromInt(i) } };
-                }
-            }
-
-            return Error.InvalidMagicString;
+            return .{ next, .{ .value = try Self.from_slice(ref) } };
         }
 
-        pub fn from_slice(src: []const u8) Error!T {
-            for (Self.strings, 0..) |s, i|
+        // `stringToEnum` is slower that doing this dance
+        pub fn from_slice(src: []const u8) Error!Value {
+            for (Self.STRINGS, 0..) |s, i|
                 if (std.mem.eql(u8, s, src))
                     return @enumFromInt(i);
 
             return Error.InvalidMagicString;
+            // return std.meta.stringToEnum(Value, src) orelse
+            //     return error.InvalidMagicString;
         }
 
         pub fn from_bytes(src: []const u8) Error!Self {

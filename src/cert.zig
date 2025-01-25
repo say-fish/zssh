@@ -29,52 +29,6 @@ fn MagicString(comptime T: type) type {
     );
 }
 
-/// `parse_fn` should be of type:
-/// ```zig
-///     fn ([]const u8, *usize, []const u8) callconv(.@"inline") type
-/// ```
-///                                                              ~~~~
-///                                                                ^
-///                                                                |
-///  +-------------------------------------------------------------+
-///  |
-///  v
-///  Due to a limitation in Zig's type system, `type` cannot be infered as a
-///  "non-comptime" value.
-fn GenericIterator(comptime parse_fn: anytype) type {
-    const T = switch (@typeInfo(@TypeOf(parse_fn))) {
-        .@"fn" => |func| func.return_type.?,
-        else => @compileError("Expected fn"),
-    };
-
-    return struct {
-        ref: []const u8,
-        off: usize,
-
-        const Self = @This();
-
-        pub fn next(self: *Self) T {
-            if (self.done()) return null;
-
-            const off, const ret = enc.rfc4251.parse_string(
-                self.ref[self.off..],
-            ) catch return null;
-
-            self.off += off;
-
-            return parse_fn(self.ref, &self.off, ret);
-        }
-
-        pub inline fn reset(self: *Self) void {
-            self.off = 0;
-        }
-
-        pub inline fn done(self: *const Self) bool {
-            return self.off == self.ref.len;
-        }
-    };
-}
-
 pub const Pem = struct {
     // FIXME: MagicString
     magic: []const u8,
@@ -130,7 +84,7 @@ pub const Critical = struct {
 
     const Self = @This();
 
-    pub const Tags = enum {
+    pub const Kind = enum {
         /// Specifies a command that is executed (replacing any the user
         /// specified on the ssh command-line) whenever this key is used for
         /// authentication.
@@ -149,39 +103,40 @@ pub const Critical = struct {
         /// this feature in their signature formats.
         @"verify-required",
 
-        pub const strings = enc.enum_to_str(Tags);
+        pub const STRINGS = enc.enum_to_str(Kind);
 
-        pub fn as_string(self: *const Tags) []const u8 {
-            return Tags.strings[@intFromEnum(self.*)];
+        pub fn as_string(self: *const Kind) []const u8 {
+            return Kind.STRINGS[@intFromEnum(self.*)];
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Tags) {
+        // `stringToEnum` is slower that doing this dance
+        pub fn from_slice(src: []const u8) !Kind {
+            for (Kind.STRINGS, 0..) |s, i|
+                if (std.mem.eql(u8, s, src))
+                    return @enumFromInt(i);
+
+            return error.InvalidData;
+        }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Kind) {
             const next, const tag = try enc.rfc4251.parse_string(src);
 
-            return .{ next, std.meta.stringToEnum(Tags, tag) orelse return error.InvalidData };
+            return .{ next, try Kind.from_slice(tag) };
         }
     };
 
     pub const Option = struct {
-        kind: Tags,
-        values: []const u8,
-
-        // FIXME: This if this is need
-        const Value = struct {
-            value: []const u8,
-
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Value) {
-                return try enc.parse_with_cont(Value, src);
-            }
-        };
-        const Iterator = enc.GenericIterator(Value);
-
-        pub fn iter(self: *const Option) Option.Iterator {
-            return .{ .ref = self.values };
-        }
+        kind: Kind,
+        value: []const u8,
 
         pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Option) {
-            return try enc.parse_with_cont(Option, src);
+            const next, const kind = try Kind.parse(src);
+
+            const final, const buf = try enc.rfc4251.parse_string(src[next..]);
+
+            _, const value = try enc.rfc4251.parse_string(buf);
+
+            return .{ next + final, .{ .kind = kind, .value = value } };
         }
     };
 
@@ -212,24 +167,17 @@ pub const Critical = struct {
 
         return .{ .kind = opt, .value = value };
     }
-
-    fn is_valid_option(opt: []const u8) ?Tags {
-        for (Self.Tags.strings, 0..) |s, i|
-            if (std.mem.eql(u8, s, opt))
-                return @enumFromInt(i);
-
-        return null;
-    }
 };
 
 /// The extensions section of the certificate specifies zero or more
 /// non-critical certificate extensions.
 pub const Extensions = struct {
-    ref: []const u8 = undefined,
+    ref: []const u8,
 
     const Self = @This();
 
-    pub const Tags = enum(u8) {
+    pub const Iterator = enc.GenericIterator(Kind);
+    pub const Kind = enum(u8) {
         /// Flag indicating that signatures made with this certificate need not
         /// assert FIDO user presence. This option only makes sense for the
         /// U2F/FIDO security key types that support this feature in their
@@ -257,27 +205,40 @@ pub const Extensions = struct {
         /// not present.
         @"permit-user-rc" = 0x01 << 5,
 
-        const strings = enc.enum_to_str(Tags);
+        const STRINGS = enc.enum_to_str(Kind);
 
-        pub inline fn as_string(self: *const Tags) []const u8 {
-            return Self.strings[@intFromEnum(self.*)];
+        pub inline fn as_string(self: *const Kind) []const u8 {
+            return STRINGS[@ctz(@intFromEnum(self.*))];
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Tags) {
+        // `stringToEnum` is slower that doing this dance
+        pub fn from_slice(src: []const u8) !Kind {
+            for (STRINGS, 0..) |s, i|
+                if (std.mem.eql(u8, s, src))
+                    return @enumFromInt(@shlExact(
+                        @as(u8, 0x01),
+                        @as(u3, @intCast(i)),
+                    ));
+
+            return error.InvalidData;
+        }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Kind) {
             const next, const tag = try enc.rfc4251.parse_string(src);
 
-            // FIXME: Why is this zero
-            const final, _ = try enc.rfc4251.parse_int(u32, src);
+            // XXX: Why is this null terminated?
+            const final, const zero = try enc.rfc4251.parse_int(u32, src[next..]);
 
-            return .{ next + final, std.meta.stringToEnum(Tags, tag) orelse return error.InvalidData };
+            if (zero != 0) {
+                return error.InvalidData;
+            }
+
+            return .{ next + final, try Kind.from_slice(tag) };
         }
     };
-    pub const Iterator = enc.GenericIterator(Tags);
 
-    pub inline fn parse(buf: []const u8) enc.Error!enc.Cont(Extensions) {
-        const next, const ref = try enc.rfc4251.parse_string(buf);
-
-        return .{ next, .{ .ref = ref } };
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Extensions) {
+        return try enc.parse_with_cont(Self, src);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -305,6 +266,8 @@ pub const Extensions = struct {
 
             continue :outer;
         }
+
+        std.debug.assert(it.done());
 
         return ret;
     }
