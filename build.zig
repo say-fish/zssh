@@ -94,7 +94,7 @@ fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
         add_assets(b, test_case, assets);
 
     var run_test_case = b.addRunArtifact(test_case);
-    run_test_case.has_side_effects = true;
+    // run_test_case.has_side_effects = true;
 
     step.dependOn(&run_test_case.step);
 }

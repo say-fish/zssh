@@ -7,9 +7,11 @@
 
 const std = @import("std");
 
-const sk = @import("sk.zig");
 const pk = @import("pk.zig");
+const sk = @import("sk.zig");
+
 const enc = @import("enc.zig");
+const sig = @import("sig.zig");
 
 // TODO: 3.2.7. Key Constraints
 // SSH_AGENT_CONSTRAIN_LIFETIME                    1
@@ -30,6 +32,20 @@ pub const Agent = union(enum(u8)) {
     extension_failure: ExtensionFailure = 28,
     /// SSH_AGENT_EXTENSION_RESPONSE = 29,
     extension_response: Extension = 29,
+
+    const Self = @This();
+
+    pub fn from_bytes(src: []const u8) !Self {
+        if (src.len < @sizeOf(u32))
+            return error.MessageTooShort;
+
+        const msg_len = std.mem.readInt(u32, src[0..4], .big);
+
+        if (msg_len + @sizeOf(u32) != src.len)
+            return error.MsgLenMismatch;
+
+        return try decode(Self, src[4 .. 4 + msg_len]);
+    }
 };
 
 pub const Client = union(enum(u8)) {
@@ -69,7 +85,7 @@ pub const Client = union(enum(u8)) {
         if (msg_len + @sizeOf(u32) != src.len)
             return error.MsgLenMismatch;
 
-        return try decode(Client, src[4 .. 4 + msg_len]);
+        return try decode(Self, src[4 .. 4 + msg_len]);
     }
 };
 
@@ -196,7 +212,7 @@ const AddIdConstrained = struct {
     const Self = @This();
 
     fn from_bytes(_: []const u8) !Self {
-        return undefined;
+        @panic("TODO: AddIdConstrained is not implemented");
     }
 };
 
@@ -207,7 +223,7 @@ const AddSmartCardKey = struct {
     const Self = @This();
 
     fn from_bytes(_: []const u8) !Self {
-        return undefined;
+        @panic("TODO: AddSmartCardKey is not implemented");
     }
 };
 
@@ -215,6 +231,12 @@ const AddSmartCardKeyConstrained = struct {
     id: []const u8,
     pin: []const u8,
     constraint: []const u8, // TODO: Type
+
+    const Self = @This();
+
+    fn from_bytes(_: []const u8) !Self {
+        @panic("TODO: AddSmartCardKeyConstrained is not implemented");
+    }
 };
 
 const RemoveIdentity = struct {
@@ -222,8 +244,8 @@ const RemoveIdentity = struct {
 
     const Self = @This();
 
-    fn from_bytes(_: []const u8) !Self {
-        return undefined;
+    fn from_bytes(src: []const u8) !Self {
+        return try enc.parse(Self, src);
     }
 };
 
@@ -245,24 +267,37 @@ const RemoveSmartcardKey = struct {
     const Self = @This();
 
     pub fn from_bytes(_: []const u8) !Self {
-        return undefined;
+        @panic("TODO: RemoveSmartcardKey is not implemented");
     }
 };
 
 const IdentitiesAnswer = struct {
     nkeys: u32,
+    keys: ?[]const u8,
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) !Self {
-        return undefined;
+    pub const Pk = struct {
+        key: pk.Pk,
+        comment: []const u8,
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Pk) {
+            return try enc.parse_with_cont(Pk, src);
+        }
+    };
+
+    pub const Iterator = enc.GenericIterator(Pk);
+
+    pub fn iter(self: *const Self) ?Iterator {
+        return if (self.keys) |keys| .{ .ref = keys } else null;
     }
 
-    // Where "nkeys" indicates the number of keys to follow. Following the preamble are zero or more keys, each encoded as:
-    //
-    //     string           key blob
-    //     string           comment
-    //
+    pub fn from_bytes(src: []const u8) !Self {
+        // No keys is explicit zero
+        const next, const nkeys = try enc.rfc4251.parse_int(u32, src);
+
+        return .{ .nkeys = nkeys, .keys = if (nkeys != 0) src[next..] else null };
+    }
 };
 
 const SignRequest = struct {
@@ -282,12 +317,12 @@ const SignRequest = struct {
 };
 
 const SignResponse = struct {
-    signature: []const u8,
+    signature: sig.Sig,
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) !Self {
-        return undefined;
+    pub fn from_bytes(src: []const u8) !Self {
+        return try enc.parse(Self, src);
     }
 };
 
@@ -296,8 +331,8 @@ const Lock = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) !Self {
-        return undefined;
+    pub fn from_bytes(src: []const u8) !Self {
+        return try enc.parse(Self, src);
     }
 };
 
@@ -306,8 +341,8 @@ const Unlock = struct {
 
     const Self = @This();
 
-    pub fn from_bytes(_: []const u8) !Self {
-        return undefined;
+    pub fn from_bytes(src: []const u8) !Self {
+        return try enc.parse(Self, src);
     }
 };
 
@@ -318,6 +353,6 @@ const Extension = struct {
     const Self = @This();
 
     pub fn from_bytes(_: []const u8) !Self {
-        return undefined;
+        @panic("TODO: Extension is not implemented");
     }
 };

@@ -312,6 +312,33 @@ pub inline fn parse_with_cont(comptime T: type, src: []const u8) Error!Cont(T) {
     return .{ i, ret };
 }
 
+pub fn GenericIterator(comptime T: type) type {
+    // TODO: Assert T has parse
+    return struct {
+        ref: []const u8,
+        off: usize = 0,
+
+        const Self = @This();
+
+        pub fn next(self: *Self) !?T {
+            if (self.done()) return null;
+
+            const off, const ret = try T.parse(self.ref[self.off..]);
+            self.off += off;
+
+            return ret;
+        }
+
+        pub inline fn reset(self: *Self) void {
+            self.off = 0;
+        }
+
+        pub inline fn done(self: *const Self) bool {
+            return self.off == self.ref.len;
+        }
+    };
+}
+
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
 
@@ -429,6 +456,7 @@ test enum_to_str {
         strings[@intFromEnum(Enum.@"this-is-a-test-string")],
     );
 }
+
 test parse_null_terminated_str {
     const malformed: []const u8 = &[_]u8{ 0x72, 0x72, 0x72 };
     const str: []const u8 = &[_]u8{ 0x72, 0x72, 0x72, 0x00 };

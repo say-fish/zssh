@@ -125,7 +125,7 @@ pub const CertType = enum(u2) {
 
 /// The critical options section of the certificate specifies zero or more
 /// options on the certificate's validity.
-pub const CriticalOptions = struct {
+pub const Critical = struct {
     ref: []const u8 = undefined,
 
     const Self = @This();
@@ -149,28 +149,56 @@ pub const CriticalOptions = struct {
         /// this feature in their signature formats.
         @"verify-required",
 
-        pub const strings = enc.enum_to_str(Self.Tags);
+        pub const strings = enc.enum_to_str(Tags);
 
-        pub fn as_string(self: *const Self.Tags) []const u8 {
+        pub fn as_string(self: *const Tags) []const u8 {
             return Tags.strings[@intFromEnum(self.*)];
+        }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Tags) {
+            const next, const tag = try enc.rfc4251.parse_string(src);
+
+            return .{ next, std.meta.stringToEnum(Tags, tag) orelse return error.InvalidData };
         }
     };
 
-    pub inline fn parse(buf: []const u8) enc.Error!enc.Cont(CriticalOptions) {
-        const next, const ref = try enc.rfc4251.parse_string(buf);
+    pub const Option = struct {
+        kind: Tags,
+        values: []const u8,
 
-        return .{ next, .{ .ref = ref } };
+        // FIXME: This if this is need
+        const Value = struct {
+            value: []const u8,
+
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Value) {
+                return try enc.parse_with_cont(Value, src);
+            }
+        };
+        const Iterator = enc.GenericIterator(Value);
+
+        pub fn iter(self: *const Option) Option.Iterator {
+            return .{ .ref = self.values };
+        }
+
+        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Option) {
+            return try enc.parse_with_cont(Option, src);
+        }
+    };
+
+    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Critical) {
+        return try enc.parse_with_cont(Self, src);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
         return enc.encoded_size(self.ref);
     }
 
+    pub const Iterator = enc.GenericIterator(Option);
     pub fn iter(self: *const Self) Self.Iterator {
-        return .{ .ref = self.ref, .off = 0 };
+        return .{ .ref = self.ref };
     }
 
-    inline fn parse_value(ref: []const u8, off: *usize, k: []const u8) ?CriticalOption {
+    inline fn parse_value(ref: []const u8, off: *usize, k: []const u8) ?Critical {
         const opt = Self.is_valid_option(k) orelse
             return null;
 
@@ -185,20 +213,13 @@ pub const CriticalOptions = struct {
         return .{ .kind = opt, .value = value };
     }
 
-    pub const Iterator = GenericIterator(parse_value);
-
-    fn is_valid_option(opt: []const u8) ?CriticalOptions.Tags {
+    fn is_valid_option(opt: []const u8) ?Tags {
         for (Self.Tags.strings, 0..) |s, i|
             if (std.mem.eql(u8, s, opt))
                 return @enumFromInt(i);
 
         return null;
     }
-};
-
-pub const CriticalOption = struct {
-    kind: CriticalOptions.Tags,
-    value: []const u8,
 };
 
 /// The extensions section of the certificate specifies zero or more
@@ -208,7 +229,6 @@ pub const Extensions = struct {
 
     const Self = @This();
 
-    pub const Iterator = GenericIterator(parse_fn);
     pub const Tags = enum(u8) {
         /// Flag indicating that signatures made with this certificate need not
         /// assert FIDO user presence. This option only makes sense for the
@@ -242,7 +262,17 @@ pub const Extensions = struct {
         pub inline fn as_string(self: *const Tags) []const u8 {
             return Self.strings[@intFromEnum(self.*)];
         }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Tags) {
+            const next, const tag = try enc.rfc4251.parse_string(src);
+
+            // FIXME: Why is this zero
+            const final, _ = try enc.rfc4251.parse_int(u32, src);
+
+            return .{ next + final, std.meta.stringToEnum(Tags, tag) orelse return error.InvalidData };
+        }
     };
+    pub const Iterator = enc.GenericIterator(Tags);
 
     pub inline fn parse(buf: []const u8) enc.Error!enc.Cont(Extensions) {
         const next, const ref = try enc.rfc4251.parse_string(buf);
@@ -258,34 +288,22 @@ pub const Extensions = struct {
         return .{ .ref = self.ref, .off = 0 };
     }
 
-    inline fn parse_fn(ref: []const u8, off: *usize, k: []const u8) ?[]const u8 {
-        // Skip empty pair
-        if (ref.len != off.*) off.* += @sizeOf(u32);
-
-        return k;
-    }
-
     /// Returns the extensions as bitflags, checking if they are valid.
     pub fn to_bitflags(self: *const Self) Error!u8 {
         var ret: u8 = 0;
 
         var it = self.iter();
 
-        outer: while (it.next()) |ext| {
-            for (Self.Tags.strings, 0..) |ext_str, j| {
-                if (std.mem.eql(u8, ext, ext_str)) {
-                    const bit: u8 = (@as(u8, 0x01) << @as(u3, @intCast(j)));
+        outer: while (try it.next()) |ext| {
+            // This is ok since the iterator already checked the values
+            const bit: u8 = @intFromEnum(ext);
 
-                    if (ret & bit != 0)
-                        return Error.RepeatedExtension;
+            if (ret & bit != 0)
+                return Error.RepeatedExtension;
 
-                    ret |= bit;
+            ret |= bit;
 
-                    continue :outer;
-                }
-            }
-
-            return Error.UnkownExtension;
+            continue :outer;
         }
 
         return ret;
@@ -297,7 +315,19 @@ const Principals = struct {
 
     const Self = @This();
 
-    pub const Iterator = GenericIterator(parse_fn);
+    pub const Principal = struct {
+        value: []const u8,
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Principal) {
+            return try enc.parse_with_cont(Principal, src);
+        }
+    };
+
+    pub const Iterator = enc.GenericIterator(Principal);
+
+    pub fn iter(self: *const Self) Iterator {
+        return .{ .ref = self.ref };
+    }
 
     pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Principals) {
         const next, const ref = try enc.rfc4251.parse_string(src);
@@ -307,14 +337,6 @@ const Principals = struct {
 
     pub fn encoded_size(self: *const Self) u32 {
         return enc.encoded_size(self.ref);
-    }
-
-    pub fn iter(self: *const Self) Self.Iterator {
-        return .{ .ref = self.ref, .off = 0 };
-    }
-
-    inline fn parse_fn(_: []const u8, _: *usize, k: []const u8) ?[]const u8 {
-        return k;
     }
 };
 
@@ -385,7 +407,7 @@ fn GenericCert(comptime M: type, comptime T: type) type {
         valid_principals: Principals,
         valid_after: u64,
         valid_before: u64,
-        critical_options: CriticalOptions,
+        critical_options: Critical,
         extensions: Extensions,
         reserved: []const u8,
         signature_key: pk.Pk,

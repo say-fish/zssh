@@ -171,6 +171,10 @@ pub const SshSig = struct {
 
     pub const HashAlgorithm = MagicString(enum { sha256, sha512 });
 
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try enc.parse_with_cont(Self, src);
+    }
+
     fn from(src: []const u8) !Self {
         return try enc.parse(Self, src);
     }

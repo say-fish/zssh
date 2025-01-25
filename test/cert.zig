@@ -15,7 +15,7 @@ fn verify_cert(cert: anytype) !void {
     try expect_equal_strings("abc", cert.key_id);
 
     var it = cert.valid_principals.iter();
-    try expect_equal_strings("root", it.next().?);
+    try expect_equal_strings("root", (try it.next()).?.value);
     try expect(it.done());
 
     try expect_equal(0, cert.valid_after);
@@ -129,12 +129,12 @@ test "verify ed25519 cert" {
 
 test "extensions iterator" {
     // Reference
-    const extensions = [_][]const u8{
-        "permit-X11-forwarding",
-        "permit-agent-forwarding",
-        "permit-port-forwarding",
-        "permit-pty",
-        "permit-user-rc",
+    const extensions = [_]zssh.cert.Extensions.Tags{
+        .@"permit-X11-forwarding",
+        .@"permit-agent-forwarding",
+        .@"permit-port-forwarding",
+        .@"permit-pty",
+        .@"permit-user-rc",
     };
 
     const Rsa = zssh.cert.Rsa;
@@ -149,7 +149,7 @@ test "extensions iterator" {
     var it = cert.extensions.iter();
 
     inline for (comptime extensions) |extension| {
-        try expect_equal_strings(extension, it.next().?);
+        try expect_equal(extension, (try it.next()).?);
     }
 
     try expect(it.done());
@@ -196,7 +196,7 @@ test "multiple valid principals iterator" {
     var it = cert.valid_principals.iter();
 
     for (valid_principals) |principal| {
-        try expect(std.mem.eql(u8, principal, it.next().?));
+        try expect(std.mem.eql(u8, principal, (try it.next()).?.value));
     }
 
     try expect(it.done());
@@ -204,9 +204,9 @@ test "multiple valid principals iterator" {
 
 test "critical options iterator" {
     // Reference
-    const critical_options = [_]zssh.cert.CriticalOption{.{
+    const critical_options = [_]zssh.cert.Critical.Option{.{
         .kind = .@"force-command",
-        .value = "ls -la",
+        .values = "ls -la", // FIXME:
     }};
 
     const Rsa = zssh.cert.Rsa;
@@ -220,10 +220,11 @@ test "critical options iterator" {
     var it = cert.critical_options.iter();
 
     inline for (comptime critical_options) |critical_option| {
-        const opt = it.next().?;
+        const opt = (try it.next()).?;
 
         try expect_equal(critical_option.kind, opt.kind);
-        try expect_equal_strings(critical_option.value, opt.value);
+        var value_iter = opt.iter();
+        try expect_equal_strings(critical_option.values, (try value_iter.next()).?.value);
     }
 
     try expect(it.done());
@@ -231,14 +232,14 @@ test "critical options iterator" {
 
 test "multiple critical options iterator" {
     // Reference
-    const critical_options = [_]zssh.cert.CriticalOption{
+    const critical_options = [_]zssh.cert.Critical.Option{
         .{
             .kind = .@"force-command",
-            .value = "ls -la",
+            .values = "ls -la",
         },
         .{
             .kind = .@"source-address",
-            .value = "198.51.100.0/24,203.0.113.0/26",
+            .values = "198.51.100.0/24,203.0.113.0/26",
         },
     };
 
@@ -255,10 +256,11 @@ test "multiple critical options iterator" {
     var it = cert.critical_options.iter();
 
     inline for (comptime critical_options) |critical_option| {
-        const opt = it.next().?;
+        const opt = (try it.next()).?;
 
         try expect_equal(critical_option.kind, opt.kind);
-        try expect_equal_strings(critical_option.value, opt.value);
+        var value_iter = opt.iter();
+        try expect_equal_strings(critical_option.values, (try value_iter.next()).?.value);
     }
 
     try expect(it.done());
