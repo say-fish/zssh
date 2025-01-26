@@ -1,3 +1,4 @@
+- Add examples
 - Support knownhosts
 - `zig build dist`
 - Support SSH revocation lists

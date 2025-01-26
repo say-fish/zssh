@@ -48,7 +48,7 @@ pub const Agent = union(enum(u8)) {
     /// SSH_AGENT_EXTENSION_FAILURE = 28,
     extension_failure: ExtensionFailure = 28,
     /// SSH_AGENT_EXTENSION_RESPONSE = 29,
-    extension_response: Extension = 29,
+    extension_response: ExtensionResponse = 29,
 
     const Self = @This();
 
@@ -98,9 +98,20 @@ const openssh_extensions = struct {
         /// exchange (as per RFC4253 section 7.2) and the host key used for that
         /// exchange. This binding is verifiable at the agent by including the
         /// initial KEX signature made by the host key.
-        session_bind: SessionBind,
+        @"session-bind@openssh.com": SessionBind,
 
-        const SessionBind = struct {};
+        const SessionBind = struct {
+            hostkey: pk.Pk,
+            identifier: []const u8,
+            signature: sig.Sig,
+            is_forwarding: u8,
+
+            const Self = @This();
+
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+                return try enc.parse_with_cont(Self, src);
+            }
+        };
     };
 
     const Constraints = union(enum) {
@@ -172,7 +183,32 @@ pub const Sk = union(enum) {
     }
 };
 
-// TODO: Move this to enc
+pub fn decode_as_string(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
+    const Tag = comptime std.meta.Tag(T);
+
+    const next, const kind = try enc.rfc4251.parse_string(src);
+
+    const e = std.meta.stringToEnum(Tag, kind) orelse
+        return error.InvalidData;
+
+    @setEvalBranchQuota(5000);
+
+    inline for (comptime std.meta.fields(T)) |field| {
+        if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
+            const final, const msg = field.type.parse(src[next..]) catch
+                return error.InvalidData;
+
+            return .{ next + final, @unionInit(T, field.name, msg) };
+        }
+    }
+
+    // On all other cases we WILL fail on `intToEnum` but zig cannot prove that
+    // this invariant holds.
+    // comptime unreachable;
+    unreachable;
+}
+
+// TODO: Move this to enc (with a decode tag)
 pub fn decode(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
     const Tag = comptime std.meta.Tag(T);
 
@@ -187,7 +223,9 @@ pub fn decode(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
 
     inline for (comptime std.meta.fields(T)) |field| {
         if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
-            const final, const msg = field.type.parse(src[next..]) catch return error.InvalidData;
+            const final, const msg = field.type.parse(src[next..]) catch
+                return error.InvalidData;
+
             return .{ next + final, @unionInit(T, field.name, msg) };
         }
     }
@@ -276,24 +314,24 @@ pub const AddIdConstrained = struct {
         confirm: Confirm = 2,
         extension: openssh_extensions.Constraints = 255,
 
+        pub const Lifetime = struct {
+            sec: u32,
+
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Lifetime) {
+                return try enc.parse_with_cont(Lifetime, src);
+            }
+        };
+
+        pub const Confirm = struct {
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Confirm) {
+                std.debug.assert(src.len == 0);
+
+                return .{ 0, .{} };
+            }
+        };
+
         pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraint) {
             return try decode(Constraint, src);
-        }
-    };
-
-    pub const Lifetime = struct {
-        sec: u32,
-
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Lifetime) {
-            return try enc.parse_with_cont(Lifetime, src);
-        }
-    };
-
-    pub const Confirm = struct {
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Confirm) {
-            std.debug.assert(src.len == 0);
-
-            return .{ 0, .{} };
         }
     };
 
@@ -394,15 +432,14 @@ const SignRequest = struct {
     data: []const u8,
     flags: u32,
 
+    const SSH_AGENT_RSA_SHA2_256: u32 = 2;
+    const SSH_AGENT_RSA_SHA2_512: u32 = 4;
+
     const Self = @This();
 
     pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         return try enc.parse_with_cont(Self, src);
     }
-
-    // TODO: 3.6.1. Signature flags
-    // SSH_AGENT_RSA_SHA2_256                          2
-    // SSH_AGENT_RSA_SHA2_512                          4
 };
 
 const SignResponse = struct {
@@ -435,13 +472,38 @@ const Unlock = struct {
     }
 };
 
-const Extension = struct {
-    extension_type: []const u8,
-    contents: []const u8,
+const ExtensionResponse = union(enum) {
+    query: Query,
 
     const Self = @This();
 
-    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
-        @panic("TODO: Extension is not implemented");
+    pub const Query = struct {
+        extensions: []const u8,
+
+        pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
+            return .{ 0, .{ .extensions = &.{} } };
+        }
+    };
+
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try decode_as_string(Self, src);
+    }
+};
+
+/// TODO: Make generic
+const Extension = union(enum) {
+    query: Query,
+    @"session-bind@openssh.com": openssh_extensions.Agent.SessionBind,
+
+    const Self = @This();
+
+    pub const Query = struct {
+        pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
+            return .{ 0, .{} };
+        }
+    };
+
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        return try decode_as_string(Self, src);
     }
 };

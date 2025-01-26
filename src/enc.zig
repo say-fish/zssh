@@ -32,6 +32,22 @@ pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     return ret;
 }
 
+pub fn Array(comptime T: type) type {
+    return struct {
+        inner: T,
+
+        const Self = @This();
+
+        fn parse(src: []const u8) Error!Cont(Self) {
+            const next, const inner = try rfc4251.parse_string(src);
+
+            const final, const ret = try T.parse(inner);
+
+            return .{ next + final, .{ .inner = ret } };
+        }
+    };
+}
+
 /// Magic string of format T used by OpenSSH. Encoding is given by the return
 /// type of f.
 ///
@@ -288,9 +304,7 @@ pub inline fn parse_with_cont(comptime T: type, src: []const u8) Error!Cont(T) {
         const next, const val = switch (comptime f.type) {
             []const u8 => try rfc4251.parse_string(ref),
 
-            u64 => try rfc4251.parse_int(u64, ref),
-
-            u32 => try rfc4251.parse_int(u32, ref),
+            u8, u32, u64 => |U| try rfc4251.parse_int(U, ref),
 
             else => if (@hasDecl(f.type, "parse"))
                 try f.type.parse(ref)
