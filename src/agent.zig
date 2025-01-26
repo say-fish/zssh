@@ -3,7 +3,6 @@
 //! > perform operations using public and private keys held in the agent.
 //!
 //! See: https://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent
-//!      https://datatracker.ietf.org/doc/html/draft-ietf-sshm-ssh-agent#name-security-considerations
 
 const std = @import("std");
 
@@ -37,62 +36,344 @@ fn msg_from_bytes(comptime T: type, src: []const u8) !T {
 
 // TODO: 3.8.1. Query extension
 pub const Agent = union(enum(u8)) {
-    /// SSH_AGENT_FAILURE = 5,
-    failure: Failure = 5,
-    /// SSH_AGENT_SUCCESS = 6,
-    success: Success = 6,
-    /// SSH_AGENT_IDENTITIES_ANSWER = 12,
+    /// The agent may reply with Failure for requests with unknown types or
+    /// requests that failed.
+    ///
+    /// Protocol number: SSH_AGENT_FAILURE = 5,
+    failure = 5,
+
+    /// On success the agent may reply with or a request-specific success
+    /// message.
+    ///
+    /// Protocol number: SSH_AGENT_SUCCESS = 6,
+    success = 6,
+
+    /// The agent shall reply with IdentitiesAnswer for RequestIdentities
+    ///
+    /// Protocol number: SSH_AGENT_IDENTITIES_ANSWER = 12,
     identities_answer: IdentitiesAnswer = 12,
-    /// SSH_AGENT_SIGN_RESPONSE = 14,
+
+    /// The signature format is specific to the algorithm of the key type in
+    /// use. SSH protocol signature formats are defined in sig.Rrf4253 for
+    /// "ssh-rsa", in sig.Rfc5656 for "ecdsa-sha2-*" keys and in sig.Rfc8709
+    /// for "ssh-ed25519" and "ssh-ed448" keys.
+    ///
+    /// Protocol number: SSH_AGENT_SIGN_RESPONSE = 14,
     sign_response: SignResponse = 14,
-    /// SSH_AGENT_EXTENSION_FAILURE = 28,
-    extension_failure: ExtensionFailure = 28,
-    /// SSH_AGENT_EXTENSION_RESPONSE = 29,
+
+    /// The agent may reply with Failure for requests with unknown types or
+    /// requests that failed.
+    ///
+    /// Protocol number: SSH_AGENT_EXTENSION_FAILURE = 28,
+    extension_failure = 28,
+
+    /// The contents of successful extension reply messages are specific to the
+    /// extension type. Extension requests may return Success on success or the
+    /// extension-specific response message.
+    ///
+    /// Protocl number: SSH_AGENT_EXTENSION_RESPONSE = 29,
     extension_response: ExtensionResponse = 29,
 
-    const Self = @This();
+    pub const IdentitiesAnswer = struct {
+        nkeys: u32,
+        keys: ?[]const u8,
 
-    pub fn from_bytes(src: []const u8) !Self {
-        return try msg_from_bytes(Self, src);
+        const Self = @This();
+
+        pub const Pk = struct {
+            key: pk.Pk,
+            comment: []const u8,
+
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Pk) {
+                return try enc.parse_with_cont(Pk, src);
+            }
+        };
+
+        pub const Iterator = enc.GenericIterator(Pk);
+
+        pub fn iter(self: *const Self) ?Iterator {
+            return if (self.keys) |keys| .{ .ref = keys } else null;
+        }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            // No keys is explicit zero
+            const next, const nkeys = try enc.rfc4251.parse_int(u32, src);
+
+            return .{ src.len, .{
+                .nkeys = nkeys,
+                .keys = if (nkeys != 0) src[next..] else null,
+            } };
+        }
+    };
+
+    const SignResponse = struct {
+        signature: sig.Sig,
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+    };
+
+    pub const ExtensionResponse = union(enum) {
+        query: Query,
+
+        const Self = @This();
+
+        pub const Query = struct {
+            extensions: []const u8,
+
+            pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
+                return .{ 0, .{ .extensions = &.{} } };
+            }
+        };
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try decode_as_string(Self, src);
+        }
+    };
+
+    pub fn from_bytes(src: []const u8) !Agent {
+        return try msg_from_bytes(Agent, src);
     }
 };
 
 pub const Client = union(enum(u8)) {
-    /// SSH_AGENTC_REQUEST_IDENTITIES = 11
-    request_identities: RequestIdentities = 11,
-    /// SSH_AGENTC_SIGN_REQUEST = 13
+    /// A client may request a list of keys from an agent using
+    /// RequestIdentities.
+    ///
+    /// Protocol number: SSH_AGENTC_REQUEST_IDENTITIES = 11
+    request_identities = 11,
+
+    /// A client may request the agent perform a private key signature operation
+    /// using SignRequest
+    ///
+    /// Protocol number: SSH_AGENTC_SIGN_REQUEST = 13
     sign_request: SignRequest = 13,
-    /// SSH_AGENTC_ADD_IDENTITY = 17
+
+    /// Keys may be added to the agent using AddIdentiy.
+    ///
+    /// Protocol number: SSH_AGENTC_ADD_IDENTITY = 17
     add_identity: AddIdentity = 17,
-    /// SSH_AGENTC_REMOVE_IDENTITY = 18
+
+    /// A client may request for specific keys to be removed.
+    ///
+    /// Protocol number: SSH_AGENTC_REMOVE_IDENTITY = 18
     remove_identity: RemoveIdentity = 18,
-    /// SSH_AGENTC_REMOVE_ALL_IDENTITIES = 19
-    remove_all_identities: RemoveAllIdentities = 19,
-    /// SSH_AGENTC_ADD_SMARTCARD_KEY = 20
-    add_smartcard_key: AddSmartCardKey = 20,
-    /// SSH_AGENTC_REMOVE_SMARTCARD_KEY = 21
+
+    /// A client may request that an agent remove all keys that it stores.
+    ///
+    /// Protocol number: SSH_AGENTC_REMOVE_ALL_IDENTITIES = 19
+    remove_all_identities = 19,
+
+    /// Protocol number: SSH_AGENTC_ADD_SMARTCARD_KEY = 20
+    add_smartcard_key: AddSmartCardKeyConstrained = 20,
+
+    /// Protocol number: SSH_AGENTC_REMOVE_SMARTCARD_KEY = 21
     remove_smartcard_key: RemoveSmartcardKey = 21,
-    /// SSH_AGENTC_LOCK = 22
+
+    /// The agent protocol supports requesting that an agent temporarily lock
+    /// itself with a pass-phrase. When locked an agent should suspend
+    /// processing of sensitive operations (private key signature operations at
+    /// the very least) until it has been unlocked with the same pass-phrase.
+    ///
+    /// Protocol number: SSH_AGENTC_LOCK = 22
     lock: Lock = 22,
-    /// SSH_AGENTC_UNLOCK = 23
+
+    /// Requests unlocking an agent.
+    ///
+    /// Protocol number: SSH_AGENTC_UNLOCK = 23
     unlock: Unlock = 23,
-    /// SSH_AGENTC_ADD_ID_CONSTRAINED = 25
+
+    /// Allows adding keys with optional constraints on their usage.
+    ///
+    /// Protocol number: SSH_AGENTC_ADD_ID_CONSTRAINED = 25
     add_id_constrained: AddIdConstrained = 25,
-    /// SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED = 26
+
+    /// Allows adding keys with optional constraints on their usage.
+    ///
+    /// Protocol number: SSH_AGENTC_ADD_SMARTCARD_KEY_CONSTRAINED = 26
     add_smartcard_key_constrained: AddIdConstrained = 26,
-    /// SSH_AGENTC_EXTENSION = 27
+
+    /// The agent protocol includes an optional extension mechanism that allows
+    /// vendor-specific and experimental messages to be sent via the agent
+    /// protocol.
+    ///
+    /// Protocol number: SSH_AGENTC_EXTENSION = 27
     extension: Extension = 27,
 
-    const Self = @This();
+    /// TODO: data
+    const SignRequest = struct {
+        key: pk.Pk,
+        data: []const u8,
+        flags: u32,
 
-    pub fn from_bytes(src: []const u8) !Self {
-        return try msg_from_bytes(Self, src);
+        const SSH_AGENT_RSA_SHA2_256: u32 = 2;
+        const SSH_AGENT_RSA_SHA2_512: u32 = 4;
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+    };
+
+    pub const AddIdentity = struct {
+        key: Sk, // TODO:
+        comment: []const u8,
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+    };
+
+    pub const RemoveIdentity = struct {
+        key: pk.Pk,
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+    };
+
+    pub const AddSmartCardKey = struct {
+        id: []const u8,
+        pin: []const u8,
+
+        const Self = @This();
+
+        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
+            @panic("TODO: AddSmartCardKey is not implemented");
+        }
+    };
+
+    pub const AddSmartCardKeyConstrained = struct {
+        id: []const u8,
+        pin: []const u8,
+        constraint: []const u8, // TODO: Type
+
+        const Self = @This();
+
+        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
+            @panic("TODO: AddSmartCardKeyConstrained is not implemented");
+        }
+    };
+
+    pub const RemoveSmartcardKey = struct {
+        /// opaque identifier for the smartcard reader
+        reader_id: []const u8,
+        PIN: []const u8,
+
+        const Self = @This();
+
+        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
+            @panic("TODO: RemoveSmartcardKey is not implemented");
+        }
+    };
+
+    pub const Lock = struct {
+        passphrase: []const u8,
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+    };
+
+    pub const Unlock = struct {
+        passphrase: []const u8,
+
+        const Self = @This();
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+    };
+
+    pub const AddIdConstrained = struct {
+        key: Sk,
+        comment: []const u8,
+        constraints: Constraints,
+
+        const Self = @This();
+
+        pub const Constraints = struct {
+            ref: []const u8,
+
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraints) {
+                // TODO: Check for null
+                return try .{ src.len, .{ .ref = src } };
+            }
+
+            pub const Iterator = enc.GenericIterator(Constraint);
+
+            pub fn iter(self: *const Constraints) Iterator {
+                return .{ .ref = self.ref };
+            }
+        };
+
+        pub const Constraint = union(enum(u8)) {
+            lifetime: Lifetime = 1,
+            confirm: Confirm = 2,
+            extension: openssh_extensions.Constraints = 255,
+
+            pub const Lifetime = struct {
+                sec: u32,
+
+                pub fn parse(src: []const u8) enc.Error!enc.Cont(Lifetime) {
+                    return try enc.parse_with_cont(Lifetime, src);
+                }
+            };
+
+            pub const Confirm = struct {
+                pub fn parse(src: []const u8) enc.Error!enc.Cont(Confirm) {
+                    std.debug.assert(src.len == 0);
+
+                    return .{ 0, .{} };
+                }
+            };
+
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraint) {
+                return try decode(Constraint, src);
+            }
+        };
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+    };
+
+    // TODO: Make generic
+    pub const Extension = union(enum) {
+        query: Query,
+        @"session-bind@openssh.com": openssh_extensions.Agent.SessionBind,
+
+        const Self = @This();
+
+        pub const Query = struct {
+            pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
+                return .{ 0, .{} };
+            }
+        };
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try decode_as_string(Self, src);
+        }
+    };
+
+    pub fn from_bytes(src: []const u8) !Client {
+        return try msg_from_bytes(Client, src);
     }
 };
 
 /// OpenSSH's extensions to the agent protocol.
-const openssh_extensions = struct {
-    const Agent = union(enum) {
+pub const openssh_extensions = struct {
+    pub const Agent = union(enum) {
         /// This extension allows a ssh client to bind an agent connection to a
         /// particular SSH session identifier as derived from the initial key
         /// exchange (as per RFC4253 section 7.2) and the host key used for that
@@ -100,7 +381,7 @@ const openssh_extensions = struct {
         /// initial KEX signature made by the host key.
         @"session-bind@openssh.com": SessionBind,
 
-        const SessionBind = struct {
+        pub const SessionBind = struct {
             hostkey: pk.Pk,
             identifier: []const u8,
             signature: sig.Sig,
@@ -114,7 +395,7 @@ const openssh_extensions = struct {
         };
     };
 
-    const Constraints = union(enum) {
+    pub const Constraints = union(enum) {
         /// This key constraint extension supports destination- and forwarding path-
         /// restricted keys. It may be attached as a constraint when keys or
         /// smartcard keys are added to an agent.
@@ -195,8 +476,8 @@ pub fn decode_as_string(comptime T: type, src: []const u8) enc.Error!enc.Cont(T)
 
     inline for (comptime std.meta.fields(T)) |field| {
         if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
-            const final, const msg = field.type.parse(src[next..]) catch
-                return error.InvalidData;
+            const final, const msg = if (comptime field.type != void) field.type.parse(src[next..]) catch
+                return error.InvalidData else .{ 0, {} };
 
             return .{ next + final, @unionInit(T, field.name, msg) };
         }
@@ -223,8 +504,8 @@ pub fn decode(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
 
     inline for (comptime std.meta.fields(T)) |field| {
         if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
-            const final, const msg = field.type.parse(src[next..]) catch
-                return error.InvalidData;
+            const final, const msg = if (comptime field.type != void) field.type.parse(src[next..]) catch
+                return error.InvalidData else .{ 0, {} };
 
             return .{ next + final, @unionInit(T, field.name, msg) };
         }
@@ -235,275 +516,3 @@ pub fn decode(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
     // comptime unreachable;
     unreachable;
 }
-
-const ExtensionFailure = struct {
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        std.debug.assert(src.len == 0);
-
-        return .{ 0, .{} };
-    }
-};
-
-const Failure = struct {
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        std.debug.assert(src.len == 0);
-
-        return .{ 0, .{} };
-    }
-};
-
-const Success = struct {
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        std.debug.assert(src.len == 0);
-
-        return .{ 0, .{} };
-    }
-};
-
-const RequestIdentities = struct {
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        std.debug.assert(src.len == 0);
-
-        return .{ 0, .{} };
-    }
-};
-
-const AddIdentity = struct {
-    key: Sk, // TODO:
-    comment: []const u8,
-
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-};
-
-pub const AddIdConstrained = struct {
-    key: Sk, // TODO:
-    comment: []const u8,
-    constraints: Constraints,
-
-    const Self = @This();
-
-    pub const Constraints = struct {
-        ref: []const u8,
-
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraints) {
-            // TODO: Check for null
-            return try .{ src.len, .{ .ref = src } };
-        }
-
-        pub const Iterator = enc.GenericIterator(Constraint);
-
-        pub fn iter(self: *const Constraints) Iterator {
-            return .{ .ref = self.ref };
-        }
-    };
-
-    pub const Constraint = union(enum(u8)) {
-        lifetime: Lifetime = 1,
-        confirm: Confirm = 2,
-        extension: openssh_extensions.Constraints = 255,
-
-        pub const Lifetime = struct {
-            sec: u32,
-
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Lifetime) {
-                return try enc.parse_with_cont(Lifetime, src);
-            }
-        };
-
-        pub const Confirm = struct {
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Confirm) {
-                std.debug.assert(src.len == 0);
-
-                return .{ 0, .{} };
-            }
-        };
-
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraint) {
-            return try decode(Constraint, src);
-        }
-    };
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-};
-
-pub const AddSmartCardKey = struct {
-    id: []const u8,
-    pin: []const u8,
-
-    const Self = @This();
-
-    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
-        @panic("TODO: AddSmartCardKey is not implemented");
-    }
-};
-
-pub const AddSmartCardKeyConstrained = struct {
-    id: []const u8,
-    pin: []const u8,
-    constraint: []const u8, // TODO: Type
-
-    const Self = @This();
-
-    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
-        @panic("TODO: AddSmartCardKeyConstrained is not implemented");
-    }
-};
-
-pub const RemoveIdentity = struct {
-    key: pk.Pk,
-
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-};
-
-pub const RemoveAllIdentities = struct {
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        std.debug.assert(src.len == 0);
-
-        return .{ 0, .{} };
-    }
-};
-
-pub const RemoveSmartcardKey = struct {
-    /// opaque identifier for the smartcard reader
-    reader_id: []const u8,
-    PIN: []const u8,
-
-    const Self = @This();
-
-    pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
-        @panic("TODO: RemoveSmartcardKey is not implemented");
-    }
-};
-
-pub const IdentitiesAnswer = struct {
-    nkeys: u32,
-    keys: ?[]const u8,
-
-    const Self = @This();
-
-    pub const Pk = struct {
-        key: pk.Pk,
-        comment: []const u8,
-
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Pk) {
-            return try enc.parse_with_cont(Pk, src);
-        }
-    };
-
-    pub const Iterator = enc.GenericIterator(Pk);
-
-    pub fn iter(self: *const Self) ?Iterator {
-        return if (self.keys) |keys| .{ .ref = keys } else null;
-    }
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        // No keys is explicit zero
-        const next, const nkeys = try enc.rfc4251.parse_int(u32, src);
-
-        return .{ src.len, .{
-            .nkeys = nkeys,
-            .keys = if (nkeys != 0) src[next..] else null,
-        } };
-    }
-};
-
-const SignRequest = struct {
-    key: pk.Pk,
-    data: []const u8,
-    flags: u32,
-
-    const SSH_AGENT_RSA_SHA2_256: u32 = 2;
-    const SSH_AGENT_RSA_SHA2_512: u32 = 4;
-
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-};
-
-const SignResponse = struct {
-    signature: sig.Sig,
-
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-};
-
-const Lock = struct {
-    passphrase: []const u8,
-
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-};
-
-const Unlock = struct {
-    passphrase: []const u8,
-
-    const Self = @This();
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-};
-
-const ExtensionResponse = union(enum) {
-    query: Query,
-
-    const Self = @This();
-
-    pub const Query = struct {
-        extensions: []const u8,
-
-        pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
-            return .{ 0, .{ .extensions = &.{} } };
-        }
-    };
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try decode_as_string(Self, src);
-    }
-};
-
-/// TODO: Make generic
-const Extension = union(enum) {
-    query: Query,
-    @"session-bind@openssh.com": openssh_extensions.Agent.SessionBind,
-
-    const Self = @This();
-
-    pub const Query = struct {
-        pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
-            return .{ 0, .{} };
-        }
-    };
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try decode_as_string(Self, src);
-    }
-};

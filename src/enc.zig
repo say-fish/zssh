@@ -18,6 +18,33 @@ pub const Error = error{
     InvalidChecksum,
 };
 
+pub fn print(src: []const u8) void {
+    var it = std.mem.window(u8, src, 16, 16);
+
+    var i: usize = 0;
+
+    while (it.next()) |win| {
+        std.debug.print(" {:05}:", .{i});
+        i += 16;
+
+        for (win) |b| {
+            std.debug.print(" {X:02}", .{b});
+        }
+
+        for (0..16 - win.len) |_| {
+            std.debug.print("   ", .{});
+        }
+
+        std.debug.print(" ", .{});
+
+        for (win) |b| {
+            std.debug.print("{c}", .{if (std.ascii.isAlphanumeric(b)) b else '.'});
+        }
+
+        std.debug.print("\n", .{});
+    }
+}
+
 pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
 
