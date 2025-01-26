@@ -1,0 +1,11 @@
+name: Feature request
+description: Request a feature
+labels: ["feature"]
+assignees: ["mulling"]
+body:
+  - type: textarea
+    id: feature
+    attributes:
+      label: Describe the feature
+    validations:
+      required: true

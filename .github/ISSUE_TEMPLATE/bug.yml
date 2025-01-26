@@ -1,0 +1,22 @@
+name: Bug report
+description: File a bug report
+labels: ["bug"]
+assignees: ["mulling"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > [!WARNING]
+        > Search other issues before, DO NOT submit security issues here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: Describe the issue
+    validations:
+      required: true
