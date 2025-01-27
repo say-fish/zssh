@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! SSH certificate parsing and verification.
 //!
 //! Support for parsing DER and PEM enconded SSH certificates. PEM decoding can

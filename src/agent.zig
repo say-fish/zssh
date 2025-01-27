@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! > [...] Protocol for interacting with an agent that holds private keys.
 //! > Clients (and possibly servers) can invoke the agent via this protocol to
 //! > perform operations using public and private keys held in the agent.

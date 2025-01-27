@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Freestanding implementation of the ssh protocol.
 pub const agent = @import("agent.zig");
 pub const cert = @import("cert.zig");
