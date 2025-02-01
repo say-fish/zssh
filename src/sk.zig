@@ -30,9 +30,11 @@ fn MagicString(comptime T: type) type {
 pub fn decrypt_aes_256_ctr(
     allocator: std.mem.Allocator,
     private_key_blob: []const u8,
-    kdf: *const Kdf,
+    kdf: *const ?Kdf,
     passphrase: []const u8,
 ) Error![]u8 {
+    std.debug.assert(kdf.* != null);
+
     const KEYLEN: u32 = 32;
     const IVLEN: u32 = 16;
 
@@ -44,9 +46,9 @@ pub fn decrypt_aes_256_ctr(
 
     std.crypto.pwhash.bcrypt.opensshKdf(
         passphrase,
-        kdf.salt,
+        kdf.*.?.salt,
         &keyiv,
-        kdf.rounds,
+        kdf.*.?.rounds,
     ) catch return Error.InvalidData; // FIXME;
 
     const ctx = std.crypto.core.aes.Aes256.initEnc(keyiv[0..KEYLEN].*);
@@ -62,7 +64,12 @@ pub fn decrypt_aes_256_ctr(
     return out;
 }
 
-pub fn decrypt_none(allocator: std.mem.Allocator, private_key_blob: []const u8, _: *const Kdf, _: []const u8) Error![]u8 {
+pub fn decrypt_none(
+    allocator: std.mem.Allocator,
+    private_key_blob: []const u8,
+    _: *const ?Kdf,
+    _: []const u8,
+) Error![]u8 {
     const out = try allocator.alloc(u8, private_key_blob.len);
     // errdefer allocator.free(out);
 
@@ -97,7 +104,7 @@ pub const Cipher = struct {
     decrypt: *const fn (
         allocator: std.mem.Allocator,
         private_key_blob: []const u8,
-        kdf: *const Kdf,
+        kdf: *const ?Kdf,
         passphrase: []const u8,
     ) Error![]u8,
 
@@ -200,26 +207,15 @@ pub const Kdf = struct {
     const Self = @This();
 
     pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Kdf) {
-        const next, const kdf = try enc.rfc4251.parse_string(src);
-
-        if (kdf.len == 0)
-            // FIXME: We should return an optional here, to do so need to
-            // allow the generic parser to support optional types.
-            return .{ next, undefined };
-
-        return .{ next, try enc.parse(Self, kdf) };
+        return try enc.parse_with_cont(Self, src);
     }
 
     pub fn serialize(self: *const Self, writer: anytype) enc.Error!void {
-        const size = enc.encoded_size_struct(self); // FIXME:
-
-        try enc.serialize_any(u32, writer, size);
-
         try enc.serialize_struct(Self, writer, self);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size_struct(self) + @sizeOf(u32);
+        return enc.encoded_size_struct(self);
     }
 };
 
@@ -228,7 +224,7 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
         magic: Magic,
         cipher: Cipher,
         kdf_name: []const u8,
-        kdf: Kdf, // TODO: Make this optional
+        kdf: Optional(Kdf), // TODO: Make this optional
         number_of_keys: u32,
         public_key_blob: []const u8,
         private_key_blob: []const u8,
@@ -237,6 +233,45 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
 
         const P = Pub;
         const S = MakeSk(Pri);
+
+        fn Optional(comptime T: type) type {
+            return struct {
+                opt: ?T,
+
+                pub fn parse(src: []const u8) enc.Error!enc.Cont(@This()) {
+                    const next, const inner = try enc.rfc4251.parse_string(src);
+
+                    if (inner.len == 0)
+                        return .{ next, .{ .opt = null } };
+
+                    _, const t = try T.parse(inner);
+
+                    return .{ next, .{ .opt = t } };
+                }
+
+                pub fn serialize(self: *const @This(), writer: anytype) !void {
+                    if (self.opt) |*opt| {
+                        const len = opt.encoded_size();
+
+                        try enc.serialize_any(u32, writer, len);
+
+                        try opt.serialize(writer);
+
+                        return;
+                    }
+
+                    try enc.serialize_any(u32, writer, 0x00);
+                }
+
+                pub fn encoded_size(self: *const @This()) u32 {
+                    if (self.opt) |*opt| {
+                        return opt.encoded_size() + @sizeOf(u32);
+                    }
+
+                    return @sizeOf(u32);
+                }
+            };
+        }
 
         fn MakeSk(comptime T: type) type {
             if (std.meta.declarations(T).len != 0)
@@ -263,7 +298,7 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
         /// Returns `true` if the `private_key_blob` is encrypted, i.e.,
         /// cipher.name != "none"
         pub inline fn is_encrypted(self: *const Self) bool {
-            return !std.mem.eql(u8, self.cipher.name, "none");
+            return !(std.mem.eql(u8, self.cipher.name, "none") and self.kdf.opt == null);
         }
 
         pub fn get_public_key(self: *const Self) !P {
@@ -286,7 +321,7 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
                     const private_blob = try cipher.decrypt(
                         allocator,
                         self.private_key_blob,
-                        &self.kdf,
+                        &self.kdf.opt,
                         passphrase orelse undefined,
                     );
                     errdefer allocator.free(private_blob);

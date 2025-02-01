@@ -161,8 +161,24 @@ test "supported ciphers" {
     }
 }
 
+test "encode Ed25519 private key (with passphrase)" {
+    const pem = try Pem.parse(@embedFile("ed25519-key-123"));
+
+    const key = try Ed25519.from_pem(std.testing.allocator, pem);
+    defer key.deinit();
+
+    try expect_equal(290, key.data.encoded_size());
+
+    const encoded = try key.data.encode(std.testing.allocator);
+    defer encoded.deinit();
+
+    try expect_equal(290, encoded.data.len);
+
+    try expect_equal_slices(u8, key.ref, encoded.data);
+}
+
 test "encode Ed25519 private key" {
-    const pem = try Pem.parse(@embedFile("ecdsa-key-123"));
+    const pem = try Pem.parse(@embedFile("ed25519-key"));
 
     const key = try Ed25519.from_pem(std.testing.allocator, pem);
     defer key.deinit();
@@ -170,6 +186,6 @@ test "encode Ed25519 private key" {
     const encoded = try key.data.encode(std.testing.allocator);
     defer encoded.deinit();
 
-    try expect_equal(359, encoded.data.len);
+    try expect_equal(242, encoded.data.len);
     try expect_equal_slices(u8, key.ref, encoded.data);
 }
