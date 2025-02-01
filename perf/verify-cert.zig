@@ -41,10 +41,13 @@ pub fn main() !void {
     const elapsed = timer.read();
 
     std.debug.print("Verify Ed25519 SSH cert\n\n", .{});
+
     std.debug.print("{s:>15}   #{:>14} times\n", .{ "iterations", MAX_RUNS });
     std.debug.print("{s:>15}   #{:>14} ns/iter\n", .{ "average", elapsed / MAX_RUNS });
     std.debug.print("{s:>15}   #{d:>14.2} /sec\n", .{
         "per second",
         1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS),
     });
+
+    std.debug.print("\n\n", .{});
 }

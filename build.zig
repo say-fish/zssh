@@ -113,6 +113,8 @@ const Perf = struct {
 
     record: bool,
 
+    noperf: bool,
+
     assets: ?*const TestAssets = null,
 };
 
@@ -135,7 +137,9 @@ fn add_perf(b: *std.Build, step: *std.Build.Step, perf: Perf) !void {
     if (perf.assets) |assets|
         add_assets(b, perf_exe, assets);
 
-    const run_perf = if (perf.record)
+    const run_perf = if (perf.noperf)
+        b.addRunArtifact(perf_exe)
+    else if (perf.record)
         b.addSystemCommand(&.{ "perf", "record", "-e", PERF_EVENTS, "--" })
     else
         b.addSystemCommand(&.{ "perf", "stat", "-d", "--" });
@@ -146,8 +150,10 @@ fn add_perf(b: *std.Build, step: *std.Build.Step, perf: Perf) !void {
         b.fmt("{s}.asm", .{@tagName(perf.opt)}),
     );
 
-    run_perf.has_side_effects = true;
-    run_perf.addArtifactArg(perf_exe);
+    if (!perf.noperf) {
+        run_perf.has_side_effects = true;
+        run_perf.addArtifactArg(perf_exe);
+    }
 
     step.dependOn(&run_perf.step);
     step.dependOn(&emit_assembly.step);
@@ -304,6 +310,12 @@ pub fn build(b: *std.Build) void {
         const record =
             b.option(bool, "record", "Perf record?") orelse false;
 
+        const noperf =
+            b.option(bool, "noperf", "Don't perf") orelse false;
+
+        if (record and noperf)
+            @panic("-Drecord cannot be used with -Dnoperf");
+
         if (opt == .all) {
             if (record) @panic("-Drecord cannot be used with -Dperf=all");
 
@@ -320,6 +332,7 @@ pub fn build(b: *std.Build) void {
                     .target = target,
                     .use_lld = lld,
                     .use_llvm = llvm,
+                    .noperf = noperf,
                 }) catch @panic("OOM");
             }
         } else {
@@ -332,6 +345,7 @@ pub fn build(b: *std.Build) void {
                 .target = target,
                 .use_lld = lld,
                 .use_llvm = llvm,
+                .noperf = noperf,
             }) catch @panic("OOM");
         }
     }
