@@ -434,7 +434,7 @@ pub const Rsa = GenericCert(MagicString(enum {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.struct_encoded_size(self);
+        return enc.encoded_size_struct(self);
     }
 });
 
@@ -453,7 +453,7 @@ pub const Ecdsa = GenericCert(MagicString(enum {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.struct_encoded_size(self);
+        return enc.encoded_size_struct(self);
     }
 });
 
@@ -469,6 +469,6 @@ pub const Ed25519 = GenericCert(MagicString(enum {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.struct_encoded_size(self);
+        return enc.encoded_size_struct(self);
     }
 });

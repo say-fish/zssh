@@ -16,6 +16,9 @@ pub const Error = error{
     InvalidChecksum,
 } || enc.Error || std.mem.Allocator.Error;
 
+const Managed = mem.Managed;
+const ManagedSecret = mem.ManagedSecret;
+
 fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
         T,
@@ -61,7 +64,7 @@ pub fn decrypt_aes_256_ctr(
 
 pub fn decrypt_none(allocator: std.mem.Allocator, private_key_blob: []const u8, _: *const Kdf, _: []const u8) Error![]u8 {
     const out = try allocator.alloc(u8, private_key_blob.len);
-    errdefer allocator.free(out);
+    // errdefer allocator.free(out);
 
     @memcpy(out, private_key_blob);
 
@@ -143,6 +146,14 @@ pub const Cipher = struct {
 
         return enc.Error.InvalidData;
     }
+
+    pub fn serialize(self: *const Self, writer: anytype) !void {
+        try enc.serialize_any([]const u8, writer, self.name);
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return enc.encoded_size(self.name);
+    }
 };
 
 /// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG keys.
@@ -170,7 +181,7 @@ pub const Pem = struct {
     pub fn decode(
         self: *const Self,
         allocator: std.mem.Allocator,
-    ) !mem.Managed([]u8) {
+    ) !Managed([]u8) {
         return .{
             .allocator = allocator,
             .data = try pem.decode_with_total_size(
@@ -198,9 +209,21 @@ pub const Kdf = struct {
 
         return .{ next, try enc.parse(Self, kdf) };
     }
+
+    pub fn serialize(self: *const Self, writer: anytype) enc.Error!void {
+        const size = enc.encoded_size_struct(self); // FIXME:
+
+        try enc.serialize_any(u32, writer, size);
+
+        try enc.serialize_struct(Self, writer, self);
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        return enc.encoded_size_struct(self) + @sizeOf(u32);
+    }
 };
 
-pub fn Sk(comptime Pub: type, comptime Pri: type) type {
+pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
     return struct {
         magic: Magic,
         cipher: Cipher,
@@ -212,18 +235,18 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
 
         const Self = @This();
 
-        const Pk = Pub;
-        const Sk = MakeSk(Pri);
+        const P = Pub;
+        const S = MakeSk(Pri);
 
         fn MakeSk(comptime T: type) type {
             if (std.meta.declarations(T).len != 0)
                 @compileError("Cannot flatten structs with declarations (see: #6709)");
 
-            const A = struct { checksum: Checksum };
+            const B = struct { checksum: Checksum };
 
-            const S = struct { comment: []const u8, _pad: enc.Padding };
+            const A = struct { comment: []const u8, _pad: enc.Padding };
 
-            const fields = std.meta.fields(A) ++ std.meta.fields(T) ++ std.meta.fields(S);
+            const fields = std.meta.fields(B) ++ std.meta.fields(T) ++ std.meta.fields(A);
 
             const ret: std.builtin.Type.Struct = .{
                 .decls = &.{},
@@ -243,7 +266,7 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
             return !std.mem.eql(u8, self.cipher.name, "none");
         }
 
-        pub fn get_public_key(self: *const Self) !Pk {
+        pub fn get_public_key(self: *const Self) !P {
             if (!@hasDecl(Pub, "from_bytes"))
                 @compileError("Type `Pub` does not declare `from_bytes([]const u8)`");
 
@@ -254,8 +277,7 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
             self: *const Self,
             allocator: std.mem.Allocator,
             passphrase: ?[]const u8,
-        ) !mem.ManagedSecret(Self.Sk) {
-            _ = Self.Sk;
+        ) !ManagedSecret(S) {
             if (self.is_encrypted() and passphrase == null)
                 return error.MissingPassphrase;
 
@@ -269,7 +291,7 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
                     );
                     errdefer allocator.free(private_blob);
 
-                    const key = try enc.parse(Self.Sk, private_blob);
+                    const key = try enc.parse(S, private_blob);
 
                     return .{
                         .allocator = allocator,
@@ -287,11 +309,36 @@ pub fn Sk(comptime Pub: type, comptime Pri: type) type {
         }
 
         pub fn from_bytes(src: []const u8) Error!Self {
-            return try Self.from(src);
+            return try from(src);
         }
 
-        pub fn from_pem(encoded_pem: Pem) Error!Self {
-            return try Self.from(encoded_pem.der);
+        pub fn from_pem(
+            allocator: std.mem.Allocator,
+            encoded_pem: Pem,
+        ) !ManagedSecret(Self) {
+            const der = try encoded_pem.decode(allocator);
+            errdefer der.deinit();
+
+            return .{
+                .allocator = allocator,
+                .data = try from(der.data),
+                .ref = der.data,
+            };
+        }
+
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) !Managed([]u8) {
+            return try enc.encode_value(Self, allocator, self);
+        }
+
+        pub fn serialize(self: *const Self, writer: anytype) enc.Error!void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
         }
     };
 }
@@ -327,8 +374,6 @@ pub const wire = struct {
     };
 };
 
-pub const Rsa = Sk(pk.Rsa, wire.Rsa);
-
-pub const Ecdsa = Sk(pk.Ecdsa, wire.Ecdsa);
-
-pub const Ed25519 = Sk(pk.Ed25519, wire.Ed25519);
+pub const Rsa = GenericSk(pk.Rsa, wire.Rsa);
+pub const Ecdsa = GenericSk(pk.Ecdsa, wire.Ecdsa);
+pub const Ed25519 = GenericSk(pk.Ed25519, wire.Ed25519);

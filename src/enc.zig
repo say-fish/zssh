@@ -1,50 +1,28 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
 
+const mem = @import("mem.zig");
+
 pub const Error = error{
     /// Invalid RFC-4251 integer
     MalformedInteger,
     /// Invalid RFC-4251 string
     MalformedString,
-    /// Malformed RFC-4251 MpInt
+    /// Malformed RFC-4251 mpint
     MalformedMpInt, // TODO:
     /// Object specific invalid data
     InvalidLiteral,
     /// Invalid/Unsupported magic string
     InvalidMagicString,
+    /// Data is invalid or corrupted
     InvalidData,
     /// The checksum for private keys is invalid, meaning either, decryption
-    /// was not successful, or data is corrupted. This is NOT an auth form
+    /// was not successful, or data is corrupted. This is **NOT** an auth form
     /// error.
     InvalidChecksum,
-};
+} || mem.Error;
 
-pub fn print(src: []const u8) void {
-    var it = std.mem.window(u8, src, 16, 16);
-
-    var i: usize = 0;
-
-    while (it.next()) |win| {
-        std.debug.print(" {:05}:", .{i});
-        i += 16;
-
-        for (win) |b| {
-            std.debug.print(" {X:02}", .{b});
-        }
-
-        for (0..16 - win.len) |_| {
-            std.debug.print("   ", .{});
-        }
-
-        std.debug.print(" ", .{});
-
-        for (win) |b| {
-            std.debug.print("{c}", .{if (std.ascii.isAlphanumeric(b)) b else '.'});
-        }
-
-        std.debug.print("\n", .{});
-    }
-}
+const Managed = mem.Managed;
 
 pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
@@ -60,26 +38,10 @@ pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     return ret;
 }
 
-pub fn Array(comptime T: type) type {
-    return struct {
-        inner: T,
-
-        const Self = @This();
-
-        fn parse(src: []const u8) Error!Cont(Self) {
-            const next, const inner = try rfc4251.parse_string(src);
-
-            const final, const ret = try T.parse(inner);
-
-            return .{ next + final, .{ .inner = ret } };
-        }
-    };
-}
-
 /// Magic string of format T used by OpenSSH. Encoding is given by the return
 /// type of f.
 ///
-/// * T must be an `enum`, where each enumeration corresponds to **VALID**
+/// * T must be an `enum`, where each enumeration corresponds to a **VALID**
 ///   magic string for this given type.
 ///
 /// * f must have this signature: `fn f([]const u8) Error!Cont(T)`.
@@ -141,7 +103,7 @@ pub fn GenericMagicString(
                 "1",
             );
 
-            try encode(F, writer, self.as_string());
+            try serialize_any(F, writer, self.as_string());
         }
     };
 }
@@ -213,8 +175,8 @@ pub fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]const u8) {
     return .{ ret.len + 1, ret };
 }
 
-// FIXME: might overflow
 pub fn null_terminated_str_encoded_size(src: []const u8) u32 {
+    // FIXME: might overflow
     return @intCast(src.len + 1);
 }
 
@@ -225,11 +187,13 @@ pub const Padding = struct {
 
     /// Returns true if padding is valid, i.e., it's a sequence.
     pub fn verify(self: *const Self) bool {
+        var ret = true;
+
         for (1.., self._pad) |i, pad| {
-            if (i != pad) return false;
+            ret = i == pad;
         }
 
-        return true;
+        return ret;
     }
 
     pub fn parse(src: []const u8) Error!Cont(Padding) {
@@ -237,11 +201,7 @@ pub const Padding = struct {
     }
 };
 
-pub fn encode_value(writer: anytype, value: anytype) !void {
-    try encode(@TypeOf(value), writer, value);
-}
-
-pub fn encode(comptime T: type, writer: anytype, value: anytype) !void {
+pub fn serialize_any(comptime T: type, writer: anytype, value: anytype) !void {
     switch (comptime T) {
         u32, u64 => _ = try writer.writeInt(T, value, .big),
 
@@ -256,7 +216,7 @@ pub fn encode(comptime T: type, writer: anytype, value: anytype) !void {
         },
 
         else => switch (comptime @typeInfo(T)) {
-            .@"struct", .@"enum" => value.encode(writer),
+            .@"struct", .@"enum" => try value.serialize(writer),
 
             // This is a special case for fixed size encoded strings
             .array => _ = try writer.writeAll(value),
@@ -266,6 +226,20 @@ pub fn encode(comptime T: type, writer: anytype, value: anytype) !void {
             ),
         },
     }
+}
+
+pub fn encode_value(
+    comptime T: type,
+    allocator: std.mem.Allocator,
+    value: *const T,
+) !Managed([]u8) {
+    // TODO: Assert T is a struct or union or enum or call serialize on the type
+    var writer = try mem.FixedBufferWriter.init(allocator, value.encoded_size());
+    errdefer writer.deinit();
+
+    try value.serialize(writer.writer());
+
+    return .{ .allocator = allocator, .data = writer.mem };
 }
 
 pub fn encoded_size(value: anytype) u32 {
@@ -293,7 +267,7 @@ pub fn encoded_size(value: anytype) u32 {
     };
 }
 
-pub fn struct_encoded_size(self: anytype) u32 {
+pub fn encoded_size_struct(self: anytype) u32 {
     var ret: u32 = 0;
 
     inline for (comptime std.meta.fields(@TypeOf(self.*))) |field| {
@@ -303,13 +277,13 @@ pub fn struct_encoded_size(self: anytype) u32 {
     return ret;
 }
 
-pub fn serialize(comptime T: type, writer: anytype, value: T) !void {
+pub fn serialize_struct(comptime T: type, writer: anytype, value: *const T) !void {
     if (@typeInfo(T) != .@"struct") {
         @compileError("Expected `struct`, got:" ++ @typeName(T));
     }
 
     inline for (comptime std.meta.fields(T)) |f| {
-        try encode(f.type, writer, @field(value, f.name));
+        try serialize_any(f.type, writer, @field(value, f.name));
     }
 }
 
@@ -407,7 +381,7 @@ test "encode u32" {
 
     const num: u32 = 10;
 
-    try encode(u32, list.writer(), num);
+    try serialize_any(u32, list.writer(), num);
     try expect_equal_strings(&[_]u8{ 0x00, 0x00, 0x00, 0x0A }, list.items);
 }
 
@@ -417,7 +391,7 @@ test "encode u64" {
 
     const num: u64 = 10;
 
-    try encode(u64, list.writer(), num);
+    try serialize_any(u64, list.writer(), num);
     try expect_equal_strings(
         &[_]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A },
         list.items,
@@ -430,7 +404,7 @@ test "encode []const u8 (rfc4251 string)" {
 
     const string: []const u8 = "this is a rfc4251 string";
 
-    try encode([]const u8, list.writer(), string);
+    try serialize_any([]const u8, list.writer(), string);
 
     try expect_equal_strings(
         &[_]u8{ 0x00, 0x00, 0x00, 0x18 } ++ string,
@@ -444,7 +418,7 @@ test "encode [:0]const u8 (null terminated string)" {
 
     const string: [:0]const u8 = "this is a null terminated string";
 
-    try encode([:0]const u8, list.writer(), string);
+    try serialize_any([:0]const u8, list.writer(), string);
 
     try expect_equal_strings(string ++ [_]u8{0x00}, list.items);
 }
@@ -455,7 +429,7 @@ test "encode [6]u8 (fixed size string)" {
 
     const string = [6]u8{ 'S', 'S', 'H', 'S', 'I', 'G' };
 
-    try encode([6]u8, list.writer(), &string);
+    try serialize_any([6]u8, list.writer(), &string);
 
     try expect_equal_strings(&string, list.items);
 }
@@ -478,12 +452,7 @@ test "serialize GenericMagicString" {
 }
 
 test enum_to_str {
-    const Enum = enum {
-        foo,
-        bar,
-        baz,
-        @"this-is-a-test-string",
-    };
+    const Enum = enum { foo, bar, baz, @"this-is-a-test-string" };
 
     const strings = enum_to_str(Enum);
 
@@ -497,11 +466,14 @@ test enum_to_str {
 }
 
 test parse_null_terminated_str {
-    const malformed: []const u8 = &[_]u8{ 0x72, 0x72, 0x72 };
     const str: []const u8 = &[_]u8{ 0x72, 0x72, 0x72, 0x00 };
+    const malformed: []const u8 = &[_]u8{ 0x72, 0x72, 0x72 };
 
     _, const a = try parse_null_terminated_str(str);
     _, const b = try parse_null_terminated_str(malformed);
+    //       ^
+    //       |
+    //       +-- This is fine since we will read to the end of the slice
 
     try expect_equal(3, a.len);
     try expect_equal(3, b.len);

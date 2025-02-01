@@ -3,13 +3,15 @@ const std = @import("std");
 
 const zssh = @import("zssh");
 
-const expect_equal_slices = std.testing.expectEqualSlices;
-const expect_error = std.testing.expectError;
-
 const Ecdsa = zssh.sk.Ecdsa;
 const Ed25519 = zssh.sk.Ed25519;
 const Pem = zssh.sk.Pem;
 const Rsa = zssh.sk.Rsa;
+const Sk = zssh.sk.Sk;
+
+const expect_equal = std.testing.expectEqual;
+const expect_equal_slices = std.testing.expectEqualSlices;
+const expect_error = std.testing.expectError;
 
 test "parse Rsa private key: get_public_key" {
     const pem = try Pem.parse(@embedFile("rsa-key"));
@@ -153,8 +155,21 @@ test "Ecdsa private key with passphrase" {
     // TODO: check other fields
 }
 
-// test "supported chipers" {
-//     for (zssh.key.private.Cipher.get_supported_ciphers()) |cipher| {
-//         std.debug.print("{s}\n", .{cipher});
-//     }
-// }
+test "supported ciphers" {
+    for (zssh.sk.Cipher.get_supported_ciphers()) |cipher| {
+        std.debug.print("{s}\n", .{cipher});
+    }
+}
+
+test "encode Ed25519 private key" {
+    const pem = try Pem.parse(@embedFile("ecdsa-key-123"));
+
+    const key = try Ed25519.from_pem(std.testing.allocator, pem);
+    defer key.deinit();
+
+    const encoded = try key.data.encode(std.testing.allocator);
+    defer encoded.deinit();
+
+    try expect_equal(359, encoded.data.len);
+    try expect_equal_slices(u8, key.ref, encoded.data);
+}

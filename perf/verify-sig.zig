@@ -51,9 +51,8 @@ pub fn main() !void {
 
     const elapsed = timer.read();
 
-    std.debug.print("Parsed SSHSIG, {} times\n", .{MAX_RUNS});
-    std.debug.print(
-        "`.verify` took ~= {}ns ({} sigs/s)\n",
-        .{ elapsed / MAX_RUNS, 1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS) },
-    );
+    std.debug.print("Verify SSHSIG\n\n", .{});
+    std.debug.print("{s:>15}   #{:>14} times\n", .{ "iterations", MAX_RUNS });
+    std.debug.print("{s:>15}   #{:>14} ns\n", .{ "average", elapsed / MAX_RUNS });
+    std.debug.print("{s:>15}   #{d:>14.2} /sec\n", .{ "per second", 1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS) });
 }

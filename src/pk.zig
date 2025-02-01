@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
 
+const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
-const enc = @import("enc.zig");
+
+const Managed = mem.Managed;
+const ManagedWithRef = mem.ManagedWithRef;
 
 pub const Error = error{
     /// This indicates, either: PEM corruption, DER corruption, or an
@@ -16,6 +19,14 @@ pub const Error = error{
 } || enc.Error || std.mem.Allocator.Error;
 
 // TODO: add support for FIDO2/U2F keys
+
+fn MagicString(comptime T: type) type {
+    return enc.GenericMagicString(
+        T,
+        enc.rfc4251.parse_string,
+        enc.rfc4251.encoded_size,
+    );
+}
 
 pub const Pem = struct {
     magic: []const u8,
@@ -31,7 +42,7 @@ pub const Pem = struct {
     pub fn decode(
         self: *const Self,
         allocator: std.mem.Allocator,
-    ) !mem.Managed([]u8) {
+    ) !Managed([]u8) {
         return .{
             .allocator = allocator,
             .data = try pem.decode_with_true_size(
@@ -46,14 +57,6 @@ pub const Pem = struct {
         return std.mem.tokenizeAny(u8, src, " ");
     }
 };
-
-fn MagicString(comptime T: type) type {
-    return enc.GenericMagicString(
-        T,
-        enc.rfc4251.parse_string,
-        enc.rfc4251.encoded_size,
-    );
-}
 
 pub const Rsa = struct {
     magic: Magic,
@@ -72,14 +75,19 @@ pub const Rsa = struct {
         return try Self.from(src);
     }
 
-    pub fn from_pem(encoded_pem: Pem) Error!Rsa {
-        // FIXME:
-        // XXX: Check if PEM magic matches what we got from the DER
-        return try Self.from(encoded_pem.der);
+    pub fn encode(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+    ) !Managed([]u8) {
+        return try enc.encode_value(Self, allocator, self);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.struct_encoded_size(self);
+        return enc.encoded_size_struct(self);
+    }
+
+    pub fn serialize(self: *const Self, writer: anytype) !void {
+        try enc.serialize_struct(Self, writer, self);
     }
 };
 
@@ -104,12 +112,19 @@ pub const Ecdsa = struct {
         return try Self.from(src);
     }
 
-    pub fn from_pem(encoded_pem: Pem) Error!Ecdsa {
-        return try Self.from(encoded_pem.der);
+    pub fn encode(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+    ) !Managed([]u8) {
+        return enc.encode_value(Self, allocator, self);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.struct_encoded_size(self);
+        return enc.encoded_size_struct(self);
+    }
+
+    pub fn serialize(self: *const Self, writer: anytype) !void {
+        try enc.serialize_struct(Self, writer, self);
     }
 };
 
@@ -129,13 +144,19 @@ pub const Ed25519 = struct {
         return try Self.from(src);
     }
 
-    // FIXME:
-    pub fn from_pem(encoded_pem: Pem) Error!Ed25519 {
-        return try Self.from(encoded_pem.der);
+    pub fn encode(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+    ) !Managed([]u8) {
+        return enc.encode_value(Self, allocator, self);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.struct_encoded_size(self);
+        return enc.encoded_size_struct(self);
+    }
+
+    pub fn serialize(self: *const Self, writer: anytype) !void {
+        try enc.serialize_struct(Self, writer, self);
     }
 };
 
@@ -160,10 +181,8 @@ pub const Pk = union(enum) {
         return .{ next, Self.from_bytes(key) catch return Error.InvalidData };
     }
 
-    pub fn from_bytes(src: []const u8) !Self {
-        _, const magic = try enc.rfc4251.parse_string(src);
-
-        return switch (try Magic.from_slice(magic)) {
+    pub fn from(magic: Magic.Value, src: []const u8) !Self {
+        return switch (magic) {
             .@"ssh-rsa",
             => .{ .rsa = try Rsa.from_bytes(src) },
 
@@ -174,6 +193,35 @@ pub const Pk = union(enum) {
 
             .@"ssh-ed25519",
             => .{ .ed25519 = try Ed25519.from_bytes(src) },
+        };
+    }
+
+    pub fn from_bytes(src: []const u8) !Self {
+        return Self.from((try Magic.from_bytes(src)).value, src);
+    }
+
+    pub fn from_pem(
+        allocator: std.mem.Allocator,
+        encoded_pem: Pem,
+    ) !ManagedWithRef(Self) {
+        const magic = try Magic.from_slice(encoded_pem.magic);
+
+        const der = try encoded_pem.decode(allocator);
+        errdefer der.deinit();
+
+        return .{
+            .allocator = allocator,
+            .data = try Self.from(magic, der.data),
+            .ref = der.data,
+        };
+    }
+
+    pub fn encode(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+    ) !Managed([]u8) {
+        return switch (self.*) {
+            inline else => |value| value.encode(allocator),
         };
     }
 

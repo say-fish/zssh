@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
-
 const builtin = @import("builtin");
+
+pub const Error = error{
+    /// Out of Memory
+    OutOfMemory,
+};
 
 pub const FixedBufferWriter = struct {
     allocator: std.mem.Allocator,
@@ -47,6 +51,10 @@ pub const FixedBufferWriter = struct {
     }
 };
 
+// TODO: For Managed* types, call deinit() if T has it.
+
+/// Managed data with a ref to the backing memory, ensures memory is zeroed
+/// before is freed
 pub fn ManagedSecret(comptime T: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -55,13 +63,14 @@ pub fn ManagedSecret(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn deinit(self: *Self) void {
+        pub fn deinit(self: *const Self) void {
             std.crypto.secureZero(u8, self.ref);
             self.allocator.free(self.ref);
         }
     };
 }
 
+/// Managed data
 pub fn Managed(comptime T: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -69,12 +78,13 @@ pub fn Managed(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn deinit(self: *Self) void {
+        pub fn deinit(self: *const Self) void {
             self.allocator.free(self.data);
         }
     };
 }
 
+/// Managed data with a ref to the backing memory
 pub fn ManagedWithRef(comptime T: type) type {
     return struct {
         allocator: std.mem.Allocator,
@@ -83,7 +93,7 @@ pub fn ManagedWithRef(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn deinit(self: *Self) void {
+        pub fn deinit(self: *const Self) void {
             self.allocator.free(self.ref);
         }
     };
@@ -94,6 +104,33 @@ pub fn Unmanaged(comptime U: type) type {
     return struct {
         data: U,
     };
+}
+
+pub fn print(src: []const u8) void {
+    var it = std.mem.window(u8, src, 16, 16);
+
+    var i: usize = 0;
+
+    while (it.next()) |win| {
+        std.debug.print(" {:05}:", .{i});
+        i += 16;
+
+        for (win) |b| {
+            std.debug.print(" {X:02}", .{b});
+        }
+
+        for (0..16 - win.len) |_| {
+            std.debug.print("   ", .{});
+        }
+
+        std.debug.print(" ", .{});
+
+        for (win) |b| {
+            std.debug.print("{c}", .{if (std.ascii.isAlphanumeric(b)) b else '.'});
+        }
+
+        std.debug.print("\n", .{});
+    }
 }
 
 const expect_equal = std.testing.expectEqual;

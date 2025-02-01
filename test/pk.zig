@@ -7,7 +7,9 @@ const Ecdsa = zssh.pk.Ecdsa;
 const Ed25519 = zssh.pk.Ed25519;
 const Pem = zssh.pk.Pem;
 const Rsa = zssh.pk.Rsa;
+const Pk = zssh.pk.Pk;
 
+const expect_equal = std.testing.expectEqual;
 const expect_equal_slices = std.testing.expectEqualSlices;
 
 // FIXME:
@@ -27,13 +29,13 @@ const expect_equal_slices = std.testing.expectEqualSlices;
 
 test "decode with allocator" {
     const pem = try Pem.parse(@embedFile("rsa-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 }
 
 test "parse Rsa public key" {
     const pem = try Pem.parse(@embedFile("rsa-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     _ = try Rsa.from_bytes(der.data);
@@ -41,7 +43,7 @@ test "parse Rsa public key" {
 
 test "parse Ecdsa public key" {
     const pem = try Pem.parse(@embedFile("ecdsa-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     _ = try Ecdsa.from_bytes(der.data);
@@ -49,7 +51,7 @@ test "parse Ecdsa public key" {
 
 test "parse ed25519 public key" {
     const pem = try Pem.parse(@embedFile("ed25519-key.pub"));
-    var der = try pem.decode(std.testing.allocator);
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     _ = try Ed25519.from_bytes(der.data);
@@ -57,11 +59,28 @@ test "parse ed25519 public key" {
 
 test "ed25519 public key with long comment" {
     const pem = try Pem.parse(@embedFile("ed25519-key-long-comment.pub"));
-    var der = try pem.decode(std.testing.allocator);
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     const expected =
         "This is a long comment with spaces in between, OpenSSH really does allow anything here...\n";
 
     try expect_equal_slices(u8, expected, pem.comment.ref);
+}
+
+test "encode Ed25519" {
+    const key = try Pk.from_pem(
+        std.testing.allocator,
+        try Pem.parse(@embedFile("ed25519-key.pub")),
+    );
+    defer key.deinit();
+
+    const encode_size = key.data.encoded_size();
+
+    try expect_equal(51, encode_size);
+
+    const encoded = try key.data.encode(std.testing.allocator);
+    defer encoded.deinit();
+
+    try expect_equal_slices(u8, key.ref, encoded.data);
 }

@@ -2,10 +2,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
-const enc = @import("enc.zig");
 
 // TODO: Error
 
@@ -19,15 +19,15 @@ fn MagicString(comptime T: type) type {
 
 /// The resulting signature is encoded as follows:
 ///
-///    string   "rsa-sha2-256" / "rsa-sha2-512"
-///    string    rsa_signature_blob
+///     string   "rsa-sha2-256" / "rsa-sha2-512"
+///     string    rsa_signature_blob
 ///
-///    The value for 'rsa_signature_blob' is encoded as a string that contains
-///    an octet string S (which is the output of RSASSA-PKCS1-v1_5) and that
-///    has the same length (in octets) as the RSA modulus.  When S contains
-///    leading zeros, there exist signers that will send a shorter encoding of
-///    S that omits them.  A verifier MAY accept shorter encodings of S with
-///    one or more leading zeros omitted.
+///   The value for 'rsa_signature_blob' is encoded as a string that contains
+///   an octet string S (which is the output of RSASSA-PKCS1-v1_5) and that
+///   has the same length (in octets) as the RSA modulus.  When S contains
+///   leading zeros, there exist signers that will send a shorter encoding of
+///   S that omits them.  A verifier MAY accept shorter encodings of S with
+///   one or more leading zeros omitted.
 pub const rfc8332 = struct {
     magic: Magic,
     blob: []const u8,
@@ -52,16 +52,16 @@ pub const rfc8332 = struct {
 
 /// Signatures are encoded as follows:
 ///
-///      string   "ecdsa-sha2-[identifier]"
-///      string   ecdsa_signature_blob
+///     string   "ecdsa-sha2-[identifier]"
+///     string   ecdsa_signature_blob
 ///
 ///   The string [identifier] is the identifier of the elliptic curve
 ///   domain parameters.
 ///
 ///   The ecdsa_signature_blob value has the following specific encoding:
 ///
-///      mpint    r
-///      mpint    s
+///     mpint    r
+///     mpint    s
 ///
 ///   The integers r and s are the output of the ECDSA algorithm.
 pub const rfc5656 = struct {
@@ -124,26 +124,6 @@ pub const rfc8032 = struct {
 };
 
 pub const SshSig = struct {
-    fn parse_fixed_string(src: []const u8) enc.Error!enc.Cont([6]u8) {
-        if (src.len < 6) {
-            return enc.Error.MalformedString;
-        }
-
-        return .{ 6, src[0..6].* };
-    }
-
-    fn fixed_string_encoded_size(_: anytype) u32 {
-        return 6;
-    }
-
-    fn MagicPreamble(comptime T: type) type {
-        return enc.GenericMagicString(
-            T,
-            parse_fixed_string,
-            fixed_string_encoded_size,
-        );
-    }
-
     /// Magic string, must be "SSHSIG"
     magic: Magic,
     /// Verifiers MUST reject signatures with versions greater than those they
@@ -169,8 +149,27 @@ pub const SshSig = struct {
     const Self = @This();
 
     pub const Magic = MagicPreamble(enum { SSHSIG });
-
     pub const HashAlgorithm = MagicString(enum { sha256, sha512 });
+
+    fn MagicPreamble(comptime T: type) type {
+        return enc.GenericMagicString(
+            T,
+            parse_fixed_string,
+            fixed_string_encoded_size,
+        );
+    }
+
+    fn parse_fixed_string(src: []const u8) enc.Error!enc.Cont([6]u8) {
+        if (src.len < 6) {
+            return enc.Error.MalformedString;
+        }
+
+        return .{ 6, src[0..6].* };
+    }
+
+    fn fixed_string_encoded_size(_: anytype) u32 {
+        return 6;
+    }
 
     pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         return try enc.parse_with_cont(Self, src);
@@ -265,10 +264,10 @@ pub const SshSig = struct {
         errdefer fbw.deinit();
 
         try self.magic.serialize(fbw.writer());
-        try enc.encode_value(fbw.writer(), self.namespace);
-        try enc.encode_value(fbw.writer(), self.reserved);
+        try enc.serialize_any([]const u8, fbw.writer(), self.namespace);
+        try enc.serialize_any([]const u8, fbw.writer(), self.reserved);
         try self.hash_algorithm.serialize(fbw.writer());
-        try enc.encode([]const u8, fbw.writer(), hmsg);
+        try enc.serialize_any([]const u8, fbw.writer(), hmsg);
 
         std.debug.assert(fbw.head == len);
 
@@ -284,7 +283,7 @@ pub const SshSig = struct {
     }
 };
 
-pub const Sig = union(enum) {
+pub const Sig = union(enum(u2)) {
     rsa: rfc8332,
     ecdsa: rfc5656,
     ed25519: rfc8032,
@@ -309,16 +308,17 @@ pub const Sig = union(enum) {
         _, const magic = try enc.rfc4251.parse_string(src);
 
         return switch (try Magic.from_slice(magic)) {
-            .@"rsa-sha2-256",
-            .@"rsa-sha2-512",
-            => return .{ .rsa = try rfc8332.from(src) },
+            .@"rsa-sha2-256", .@"rsa-sha2-512" => return .{
+                .rsa = try rfc8332.from(src),
+            },
 
-            .@"ecdsa-sha2-nistp256",
-            .@"ecdsa-sha2-nistp512",
-            => return .{ .ecdsa = try rfc5656.from(src) },
+            .@"ecdsa-sha2-nistp256", .@"ecdsa-sha2-nistp512" => return .{
+                .ecdsa = try rfc5656.from(src),
+            },
 
-            .@"ssh-ed25519",
-            => return .{ .ed25519 = try rfc8032.from(src) },
+            .@"ssh-ed25519" => return .{
+                .ed25519 = try rfc8032.from(src),
+            },
         };
     }
 };
