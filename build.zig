@@ -99,7 +99,16 @@ fn add_test(b: *std.Build, step: *std.Build.Step, t: Test) !void {
     step.dependOn(&run_test_case.step);
 }
 
-const PerfOpt = enum { @"verify-cert", @"verify-sig", cert, sk, pk, sig, all };
+const PerfOpt = enum {
+    @"verify-cert",
+    @"verify-sig",
+    all,
+    cert,
+    encode,
+    pk,
+    sig,
+    sk,
+};
 
 const Perf = struct {
     target: std.Build.ResolvedTarget,

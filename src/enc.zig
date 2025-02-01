@@ -97,7 +97,7 @@ pub fn GenericMagicString(
             return @intCast(x(self.as_string()));
         }
 
-        pub fn serialize(self: *const Self, writer: anytype) !void {
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
             const F = @FieldType(
                 @typeInfo(@typeInfo(@TypeOf(f)).@"fn".return_type.?).error_union.payload,
                 "1",
@@ -201,7 +201,11 @@ pub const Padding = struct {
     }
 };
 
-pub fn serialize_any(comptime T: type, writer: anytype, value: anytype) !void {
+pub fn serialize_any(
+    comptime T: type,
+    writer: std.io.AnyWriter,
+    value: anytype,
+) !void {
     switch (comptime T) {
         u32, u64 => _ = try writer.writeInt(T, value, .big),
 
@@ -237,7 +241,7 @@ pub fn encode_value(
     var writer = try mem.FixedBufferWriter.init(allocator, value.encoded_size());
     errdefer writer.deinit();
 
-    try value.serialize(writer.writer());
+    try value.serialize(writer.writer().any());
 
     return .{ .allocator = allocator, .data = writer.mem };
 }
@@ -277,7 +281,11 @@ pub fn encoded_size_struct(self: anytype) u32 {
     return ret;
 }
 
-pub fn serialize_struct(comptime T: type, writer: anytype, value: *const T) !void {
+pub fn serialize_struct(
+    comptime T: type,
+    writer: std.io.AnyWriter,
+    value: *const T,
+) !void {
     if (@typeInfo(T) != .@"struct") {
         @compileError("Expected `struct`, got:" ++ @typeName(T));
     }
@@ -381,7 +389,7 @@ test "encode u32" {
 
     const num: u32 = 10;
 
-    try serialize_any(u32, list.writer(), num);
+    try serialize_any(u32, list.writer().any(), num);
     try expect_equal_strings(&[_]u8{ 0x00, 0x00, 0x00, 0x0A }, list.items);
 }
 
@@ -391,7 +399,7 @@ test "encode u64" {
 
     const num: u64 = 10;
 
-    try serialize_any(u64, list.writer(), num);
+    try serialize_any(u64, list.writer().any(), num);
     try expect_equal_strings(
         &[_]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x0A },
         list.items,
@@ -404,7 +412,7 @@ test "encode []const u8 (rfc4251 string)" {
 
     const string: []const u8 = "this is a rfc4251 string";
 
-    try serialize_any([]const u8, list.writer(), string);
+    try serialize_any([]const u8, list.writer().any(), string);
 
     try expect_equal_strings(
         &[_]u8{ 0x00, 0x00, 0x00, 0x18 } ++ string,
@@ -418,7 +426,7 @@ test "encode [:0]const u8 (null terminated string)" {
 
     const string: [:0]const u8 = "this is a null terminated string";
 
-    try serialize_any([:0]const u8, list.writer(), string);
+    try serialize_any([:0]const u8, list.writer().any(), string);
 
     try expect_equal_strings(string ++ [_]u8{0x00}, list.items);
 }
@@ -429,7 +437,7 @@ test "encode [6]u8 (fixed size string)" {
 
     const string = [6]u8{ 'S', 'S', 'H', 'S', 'I', 'G' };
 
-    try serialize_any([6]u8, list.writer(), &string);
+    try serialize_any([6]u8, list.writer().any(), &string);
 
     try expect_equal_strings(&string, list.items);
 }
@@ -444,7 +452,7 @@ test "serialize GenericMagicString" {
     var list = std.ArrayList(u8).init(std.testing.allocator);
     defer list.deinit();
 
-    try magic.serialize(list.writer());
+    try magic.serialize(list.writer().any());
     try expect_equal(
         .this_is_a_test_with_size_42,
         (try @TypeOf(magic).from_bytes(list.items)).value,

@@ -263,11 +263,11 @@ pub const SshSig = struct {
         var fbw = try mem.FixedBufferWriter.init(allocator, len);
         errdefer fbw.deinit();
 
-        try self.magic.serialize(fbw.writer());
-        try enc.serialize_any([]const u8, fbw.writer(), self.namespace);
-        try enc.serialize_any([]const u8, fbw.writer(), self.reserved);
-        try self.hash_algorithm.serialize(fbw.writer());
-        try enc.serialize_any([]const u8, fbw.writer(), hmsg);
+        try self.magic.serialize(fbw.writer().any());
+        try enc.serialize_any([]const u8, fbw.writer().any(), self.namespace);
+        try enc.serialize_any([]const u8, fbw.writer().any(), self.reserved);
+        try self.hash_algorithm.serialize(fbw.writer().any());
+        try enc.serialize_any([]const u8, fbw.writer().any(), hmsg);
 
         std.debug.assert(fbw.head == len);
 

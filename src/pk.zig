@@ -86,7 +86,7 @@ pub const Rsa = struct {
         return enc.encoded_size_struct(self);
     }
 
-    pub fn serialize(self: *const Self, writer: anytype) !void {
+    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
         try enc.serialize_struct(Self, writer, self);
     }
 };
@@ -123,7 +123,7 @@ pub const Ecdsa = struct {
         return enc.encoded_size_struct(self);
     }
 
-    pub fn serialize(self: *const Self, writer: anytype) !void {
+    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
         try enc.serialize_struct(Self, writer, self);
     }
 };
@@ -155,7 +155,7 @@ pub const Ed25519 = struct {
         return enc.encoded_size_struct(self);
     }
 
-    pub fn serialize(self: *const Self, writer: anytype) !void {
+    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
         try enc.serialize_struct(Self, writer, self);
     }
 };

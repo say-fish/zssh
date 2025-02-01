@@ -23,6 +23,7 @@ pub fn main() !void {
     var der = try pem.decode(allocator);
     defer der.deinit();
 
+    // Avoid benchmarking the gpa allocator
     var buf = std.mem.zeroes([4096]u8);
     var fixed_allocator = std.heap.FixedBufferAllocator.init(&buf);
 

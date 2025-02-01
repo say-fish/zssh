@@ -210,7 +210,7 @@ pub const Kdf = struct {
         return try enc.parse_with_cont(Self, src);
     }
 
-    pub fn serialize(self: *const Self, writer: anytype) enc.Error!void {
+    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
         try enc.serialize_struct(Self, writer, self);
     }
 
@@ -368,7 +368,7 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
             return try enc.encode_value(Self, allocator, self);
         }
 
-        pub fn serialize(self: *const Self, writer: anytype) enc.Error!void {
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
             try enc.serialize_struct(Self, writer, self);
         }
 
