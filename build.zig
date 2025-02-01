@@ -180,7 +180,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{
             .src_path = .{
                 .owner = b,
-                .sub_path = b.pathFromRoot("src/zssh.zig"),
+                .sub_path = b.pathFromRoot("zssh.zig"),
             },
         },
         .target = target,
@@ -213,7 +213,7 @@ pub fn build(b: *std.Build) void {
 
         add_test(b, test_step, .{
             .name = "mem",
-            .root_source_file = b.path("src/mem.zig"),
+            .root_source_file = b.path("mem.zig"),
             .target = target,
             .optimize = optimize,
             .mod = mod,
@@ -272,7 +272,7 @@ pub fn build(b: *std.Build) void {
 
         add_test(b, test_step, .{
             .name = "enc",
-            .root_source_file = b.path("src/enc.zig"),
+            .root_source_file = b.path("enc.zig"),
             .target = target,
             .optimize = optimize,
             .use_lld = lld,
@@ -285,7 +285,7 @@ pub fn build(b: *std.Build) void {
     {
         const docs_obj = b.addObject(.{
             .name = "zssh",
-            .root_source_file = b.path("src/zssh.zig"),
+            .root_source_file = b.path("zssh.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -361,7 +361,7 @@ pub fn build(b: *std.Build) void {
 
     const dummy = b.addTest(.{
         .name = "zssh",
-        .root_source_file = b.path("src/zssh.zig"),
+        .root_source_file = b.path("zssh.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -370,7 +370,7 @@ pub fn build(b: *std.Build) void {
 
     const dummy_check = b.addTest(.{
         .name = "zssh",
-        .root_source_file = b.path("src/zssh.zig"),
+        .root_source_file = b.path("zssh.zig"),
         .target = target,
         .optimize = optimize,
     });
