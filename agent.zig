@@ -309,7 +309,7 @@ pub const Client = union(enum(u8)) {
 
             pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraints) {
                 // TODO: Check for null
-                return try .{ src.len, .{ .ref = src } };
+                return .{ src.len, .{ .ref = src } };
             }
 
             pub const Iterator = enc.GenericIterator(Constraint);
