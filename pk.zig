@@ -5,9 +5,6 @@ const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
 
-const Managed = mem.Managed;
-const ManagedWithRef = mem.ManagedWithRef;
-
 pub const Error = error{
     /// This indicates, either: PEM corruption, DER corruption, or an
     /// unsupported magic string.
@@ -20,6 +17,9 @@ pub const Error = error{
 
 // TODO: add support for FIDO2/U2F keys
 
+const Box = mem.Box;
+const BoxRef = mem.BoxRef;
+
 fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
         T,
@@ -29,32 +29,26 @@ fn MagicString(comptime T: type) type {
 }
 
 pub const Pem = struct {
-    magic: []const u8,
+    magic: []const u8, // FIXME: MagicString
     der: []const u8,
-    comment: pem.Blob(std.mem.TokenIterator(u8, .any)),
+    comment: pem.Blob(TokenIterator),
 
     const Self = @This();
+    const TokenIterator = std.mem.TokenIterator(u8, .any);
+
+    pub fn tokenize(src: []const u8) TokenIterator {
+        return std.mem.tokenizeAny(u8, src, " ");
+    }
 
     pub fn parse(src: []const u8) !Self {
         return try pem.parse(Self, src);
     }
 
-    pub fn decode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !Managed([]u8) {
-        return .{
-            .allocator = allocator,
-            .data = try pem.decode_with_true_size(
-                allocator,
-                std.base64.standard.Decoder,
-                self.der,
-            ),
-        };
-    }
+    pub fn decode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        const data =
+            try pem.decode_with_true_size(allocator, std.base64.standard.Decoder, self.der);
 
-    pub fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .any) {
-        return std.mem.tokenizeAny(u8, src, " ");
+        return .{ .allocator = allocator, .data = data };
     }
 };
 
@@ -75,11 +69,8 @@ pub const Rsa = struct {
         return try Self.from(src);
     }
 
-    pub fn encode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !Managed([]u8) {
-        return try enc.encode_value(Self, allocator, self);
+    pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        return try enc.encode_value(Self, allocator, self, .plain);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -112,11 +103,8 @@ pub const Ecdsa = struct {
         return try Self.from(src);
     }
 
-    pub fn encode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !Managed([]u8) {
-        return enc.encode_value(Self, allocator, self);
+    pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        return enc.encode_value(Self, allocator, self, .plain);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -144,11 +132,8 @@ pub const Ed25519 = struct {
         return try Self.from(src);
     }
 
-    pub fn encode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !Managed([]u8) {
-        return enc.encode_value(Self, allocator, self);
+    pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        return enc.encode_value(Self, allocator, self, .plain);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -200,13 +185,10 @@ pub const Pk = union(enum) {
         return Self.from((try Magic.from_bytes(src)).value, src);
     }
 
-    pub fn from_pem(
-        allocator: std.mem.Allocator,
-        encoded_pem: Pem,
-    ) !ManagedWithRef(Self) {
-        const magic = try Magic.from_slice(encoded_pem.magic);
+    pub fn from_pem(allocator: std.mem.Allocator, pem_enc: Pem) !BoxRef(Self, .plain) {
+        const magic = try Magic.from_slice(pem_enc.magic);
 
-        const der = try encoded_pem.decode(allocator);
+        const der = try pem_enc.decode(allocator);
         errdefer der.deinit();
 
         return .{
@@ -216,10 +198,7 @@ pub const Pk = union(enum) {
         };
     }
 
-    pub fn encode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !Managed([]u8) {
+    pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
         return switch (self.*) {
             inline else => |value| value.encode(allocator),
         };

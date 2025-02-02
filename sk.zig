@@ -16,8 +16,8 @@ pub const Error = error{
     InvalidChecksum,
 } || enc.Error || std.mem.Allocator.Error;
 
-const Managed = mem.Managed;
-const ManagedSecret = mem.ManagedSecret;
+const Box = mem.Box;
+const BoxRef = mem.BoxRef;
 
 fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
@@ -83,7 +83,7 @@ pub const Checksum = struct {
 
     const Self = @This();
 
-    pub inline fn check_checksum(value: u64) bool {
+    pub inline fn check(value: u64) bool {
         return @as(u32, @truncate(std.math.shr(u64, value, @bitSizeOf(u32)))) ==
             @as(u32, @truncate(value));
     }
@@ -92,8 +92,7 @@ pub const Checksum = struct {
         const next, const checksum = try enc.rfc4251.parse_int(u64, src);
 
         // XXX: This is not realy great
-        if (!Self.check_checksum(checksum))
-            return Error.InvalidChecksum;
+        if (!check(checksum)) return Error.InvalidChecksum;
 
         return .{ next, .{ .value = checksum } };
     }
@@ -154,7 +153,7 @@ pub const Cipher = struct {
         return enc.Error.InvalidData;
     }
 
-    pub fn serialize(self: *const Self, writer: anytype) !void {
+    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
         try enc.serialize_any([]const u8, writer, self.name);
     }
 
@@ -165,19 +164,14 @@ pub const Cipher = struct {
 
 /// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG keys.
 pub const Pem = struct {
-    _prefix: pem.Literal(
-        "BEGIN OPENSSH PRIVATE KEY",
-        std.mem.TokenIterator(u8, .sequence),
-    ),
+    pre: pem.Literal("BEGIN OPENSSH PRIVATE KEY", TokenIterator),
     der: []const u8,
-    _posfix: pem.Literal(
-        "END OPENSSH PRIVATE KEY",
-        std.mem.TokenIterator(u8, .sequence),
-    ),
+    suf: pem.Literal("END OPENSSH PRIVATE KEY", TokenIterator),
 
     const Self = @This();
+    const TokenIterator = std.mem.TokenIterator(u8, .sequence);
 
-    pub fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .sequence) {
+    pub fn tokenize(src: []const u8) TokenIterator {
         return std.mem.tokenizeSequence(u8, src, "-----");
     }
 
@@ -185,18 +179,11 @@ pub const Pem = struct {
         return try pem.parse(Self, src);
     }
 
-    pub fn decode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !Managed([]u8) {
-        return .{
-            .allocator = allocator,
-            .data = try pem.decode_with_total_size(
-                allocator,
-                pem.base64.Decoder,
-                self.der,
-            ),
-        };
+    pub fn decode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+        const data =
+            try pem.decode_with_total_size(allocator, pem.base64.Decoder, self.der);
+
+        return .{ .allocator = allocator, .data = data };
     }
 };
 
@@ -224,7 +211,7 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
         magic: Magic,
         cipher: Cipher,
         kdf_name: []const u8,
-        kdf: Optional(Kdf), // TODO: Make this optional
+        kdf: Optional(Kdf),
         number_of_keys: u32,
         public_key_blob: []const u8,
         private_key_blob: []const u8,
@@ -274,8 +261,8 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
         }
 
         fn MakeSk(comptime T: type) type {
-            if (std.meta.declarations(T).len != 0)
-                @compileError("Cannot flatten structs with declarations (see: #6709)");
+            // if (std.meta.declarations(T).len != 0)
+            //     @compileError("Cannot flatten structs with declarations (see: #6709)");
 
             const B = struct { checksum: Checksum };
 
@@ -312,7 +299,7 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
             self: *const Self,
             allocator: std.mem.Allocator,
             passphrase: ?[]const u8,
-        ) !ManagedSecret(S) {
+        ) !BoxRef(S, .sec) {
             if (self.is_encrypted() and passphrase == null)
                 return error.MissingPassphrase;
 
@@ -339,6 +326,14 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
             unreachable;
         }
 
+        pub fn get_sk_wire(sk: *const S) Pri {
+            var ret = std.mem.zeroes(Pri);
+
+            mem.shallow_copy(Pri, &ret, S, sk);
+
+            return ret;
+        }
+
         fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
         }
@@ -347,10 +342,7 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
             return try from(src);
         }
 
-        pub fn from_pem(
-            allocator: std.mem.Allocator,
-            encoded_pem: Pem,
-        ) !ManagedSecret(Self) {
+        pub fn from_pem(allocator: std.mem.Allocator, encoded_pem: Pem) !BoxRef(Self, .sec) {
             const der = try encoded_pem.decode(allocator);
             errdefer der.deinit();
 
@@ -361,11 +353,8 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
             };
         }
 
-        pub fn encode(
-            self: *const Self,
-            allocator: std.mem.Allocator,
-        ) !Managed([]u8) {
-            return try enc.encode_value(Self, allocator, self);
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+            return try enc.encode_value(Self, allocator, self, .sec);
         }
 
         pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
@@ -389,6 +378,20 @@ pub const wire = struct {
         i: []const u8,
         p: []const u8,
         q: []const u8,
+
+        const Self = @This();
+
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+            return try enc.encode_value(Self, allocator, self, .sec);
+        }
+
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size(self);
+        }
     };
 
     pub const Ecdsa = struct {
@@ -398,6 +401,20 @@ pub const wire = struct {
         pk: []const u8,
         // Private parts
         sk: []const u8,
+
+        const Self = @This();
+
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+            return try enc.encode_value(Self, allocator, self, .sec);
+        }
+
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size(self);
+        }
     };
 
     pub const Ed25519 = struct {
@@ -406,6 +423,20 @@ pub const wire = struct {
         pk: []const u8,
         // Private parts
         sk: []const u8,
+
+        const Self = @This();
+
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+            return try enc.encode_value(Self, allocator, self, .sec);
+        }
+
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
+        }
     };
 };
 

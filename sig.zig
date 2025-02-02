@@ -9,6 +9,9 @@ const pk = @import("pk.zig");
 
 // TODO: Error
 
+const Box = mem.Box;
+const BoxRef = mem.BoxRef;
+
 fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
         T,
@@ -102,7 +105,7 @@ pub const rfc5656 = struct {
 };
 
 /// The EdDSA signature of a message M under a private key k is defined as the
-/// PureEdDSA signature of PH(M).  In other words, EdDSA simply uses PureEdDSA
+/// PureEdDSA signature of PH(M). In other words, EdDSA simply uses PureEdDSA
 /// to sign PH(M).
 pub const rfc8032 = struct {
     magic: Magic,
@@ -183,10 +186,7 @@ pub const SshSig = struct {
         return try Self.from(src);
     }
 
-    pub fn from_pem(
-        allocator: std.mem.Allocator,
-        encoded_pem: *const Pem,
-    ) !mem.ManagedWithRef(Self) {
+    pub fn from_pem(allocator: std.mem.Allocator, encoded_pem: *const Pem) !BoxRef(Self, .sec) {
         var der = try encoded_pem.decode(allocator);
         errdefer der.deinit();
 
@@ -218,10 +218,7 @@ pub const SshSig = struct {
             return try pem.parse(Pem, src);
         }
 
-        pub fn decode(
-            self: *const Pem,
-            allocator: std.mem.Allocator,
-        ) !mem.Managed([]u8) {
+        pub fn decode(self: *const Pem, allocator: std.mem.Allocator) !Box([]u8, .sec) {
             return .{
                 .allocator = allocator,
                 .data = try pem.decode_with_total_size(
@@ -253,28 +250,28 @@ pub const SshSig = struct {
         self: *const Self,
         allocator: std.mem.Allocator,
         hmsg: []const u8,
-    ) !mem.ManagedWithRef(Blob) {
+    ) !BoxRef(Blob, .sec) {
         const len = self.magic.encoded_size() +
             enc.rfc4251.encoded_size(self.namespace) +
             enc.rfc4251.encoded_size(self.reserved) +
             self.hash_algorithm.encoded_size() +
             @sizeOf(u32) + hmsg.len;
 
-        var fbw = try mem.FixedBufferWriter.init(allocator, len);
-        errdefer fbw.deinit();
+        var writer = try mem.ArrayWriter.init(allocator, len);
+        errdefer writer.deinit();
 
-        try self.magic.serialize(fbw.writer().any());
-        try enc.serialize_any([]const u8, fbw.writer().any(), self.namespace);
-        try enc.serialize_any([]const u8, fbw.writer().any(), self.reserved);
-        try self.hash_algorithm.serialize(fbw.writer().any());
-        try enc.serialize_any([]const u8, fbw.writer().any(), hmsg);
+        try self.magic.serialize(writer.writer().any());
+        try enc.serialize_any([]const u8, writer.writer().any(), self.namespace);
+        try enc.serialize_any([]const u8, writer.writer().any(), self.reserved);
+        try self.hash_algorithm.serialize(writer.writer().any());
+        try enc.serialize_any([]const u8, writer.writer().any(), hmsg);
 
-        std.debug.assert(fbw.head == len);
+        std.debug.assert(writer.head == len);
 
         return .{
-            .data = try Blob.from_bytes(fbw.mem),
+            .data = try Blob.from_bytes(writer.mem),
             .allocator = allocator,
-            .ref = fbw.mem,
+            .ref = writer.mem,
         };
     }
 

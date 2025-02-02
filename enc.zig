@@ -22,7 +22,8 @@ pub const Error = error{
     InvalidChecksum,
 } || mem.Error;
 
-const Managed = mem.Managed;
+const Box = mem.Box;
+const Mode = mem.Mode;
 
 pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
@@ -232,13 +233,9 @@ pub fn serialize_any(
     }
 }
 
-pub fn encode_value(
-    comptime T: type,
-    allocator: std.mem.Allocator,
-    value: *const T,
-) !Managed([]u8) {
+pub fn encode_value(comptime T: type, allocator: std.mem.Allocator, value: *const T, comptime mode: Mode) !Box([]u8, mode) {
     // TODO: Assert T is a struct or union or enum or call serialize on the type
-    var writer = try mem.FixedBufferWriter.init(allocator, value.encoded_size());
+    var writer = try mem.ArrayWriter.init(allocator, value.encoded_size());
     errdefer writer.deinit();
 
     try value.serialize(writer.writer().any());

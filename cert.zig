@@ -23,6 +23,9 @@ pub const Error = error{
     UnkownExtension,
 } || enc.Error;
 
+const Box = mem.Box;
+const BoxRef = mem.BoxRef;
+
 fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
         T,
@@ -32,33 +35,26 @@ fn MagicString(comptime T: type) type {
 }
 
 pub const Pem = struct {
-    // FIXME: MagicString
-    magic: []const u8,
+    magic: []const u8, // FIXME: MagicString
     der: []const u8,
-    comment: []const u8,
+    comment: pem.Blob(TokenIterator),
 
     const Self = @This();
+    const TokenIterator = std.mem.TokenIterator(u8, .any);
+
+    pub inline fn tokenize(src: []const u8) TokenIterator {
+        return std.mem.tokenizeAny(u8, src, " ");
+    }
 
     pub fn parse(src: []const u8) !Self {
         return try pem.parse(Self, src);
     }
 
-    pub fn decode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !mem.Managed([]u8) {
-        return .{
-            .allocator = allocator,
-            .data = try pem.decode_with_true_size(
-                allocator,
-                std.base64.standard.Decoder,
-                self.der,
-            ),
-        };
-    }
+    pub fn decode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        const data =
+            try pem.decode_with_true_size(allocator, std.base64.standard.Decoder, self.der);
 
-    pub inline fn tokenize(src: []const u8) std.mem.TokenIterator(u8, .any) {
-        return std.mem.tokenizeAny(u8, src, " ");
+        return .{ .allocator = allocator, .data = data };
     }
 };
 
@@ -73,6 +69,8 @@ pub const CertType = enum(u2) {
 
         return .{ next, @enumFromInt(val) };
     }
+
+    // FIXME: serialyze
 
     pub fn encoded_size(self: *const Self) u32 {
         return enc.encoded_size(@as(u32, @intFromEnum(self.*)));
@@ -343,13 +341,10 @@ pub const Cert = union(enum) {
         return Self.from((try Magic.from_bytes(src)).value, src);
     }
 
-    pub fn from_pem(
-        allocator: std.mem.Allocator,
-        encoded_pem: *const Pem,
-    ) !mem.ManagedWithRef(Self) {
-        const magic = try Magic.from_slice(encoded_pem.magic);
+    pub fn from_pem(allocator: std.mem.Allocator, pem_enc: *const Pem) !BoxRef(Self, .plain) {
+        const magic = try Magic.from_slice(pem_enc.magic);
 
-        var der = try encoded_pem.decode(allocator);
+        var der = try pem_enc.decode(allocator);
         errdefer der.deinit();
 
         return .{
@@ -386,16 +381,12 @@ fn GenericCert(comptime M: type, comptime T: type) type {
             return try enc.parse(Self, src);
         }
 
-        pub fn from_pem(
-            allocator: std.mem.Allocator,
-            encoded_pem: *const Pem,
-        ) !mem.ManagedWithRef(Self) {
-            var der = try encoded_pem.decode(allocator);
+        pub fn from_pem(allocator: std.mem.Allocator, pem_enc: *const Pem) !BoxRef(Self, .plain) {
+            var der = try pem_enc.decode(allocator);
             errdefer der.deinit();
 
             return .{
                 .allocator = allocator,
-                // FIXME asssert T has `from_bytes`
                 .data = try Self.from_bytes(der.data),
                 .ref = der.data,
             };

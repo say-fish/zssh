@@ -7,7 +7,7 @@ pub const Error = error{
     OutOfMemory,
 };
 
-pub const FixedBufferWriter = struct {
+pub const ArrayWriter = struct {
     allocator: std.mem.Allocator,
     head: usize = 0,
     mem: []u8,
@@ -51,27 +51,14 @@ pub const FixedBufferWriter = struct {
     }
 };
 
+pub const Mode = enum {
+    plain,
+    sec,
+};
+
 // TODO: For Managed* types, call deinit() if T has it.
 
-/// Managed data with a ref to the backing memory, ensures memory is zeroed
-/// before is freed
-pub fn ManagedSecret(comptime T: type) type {
-    return struct {
-        allocator: std.mem.Allocator,
-        data: T,
-        ref: []u8,
-
-        const Self = @This();
-
-        pub fn deinit(self: *const Self) void {
-            std.crypto.secureZero(u8, self.ref);
-            self.allocator.free(self.ref);
-        }
-    };
-}
-
-/// Managed data
-pub fn Managed(comptime T: type) type {
+pub fn Box(comptime T: type, comptime mode: Mode) type {
     return struct {
         allocator: std.mem.Allocator,
         data: T,
@@ -79,13 +66,14 @@ pub fn Managed(comptime T: type) type {
         const Self = @This();
 
         pub fn deinit(self: *const Self) void {
+            if (comptime mode == .sec)
+                std.crypto.secureZero(u8, self.data);
             self.allocator.free(self.data);
         }
     };
 }
 
-/// Managed data with a ref to the backing memory
-pub fn ManagedWithRef(comptime T: type) type {
+pub fn BoxRef(comptime T: type, comptime mode: Mode) type {
     return struct {
         allocator: std.mem.Allocator,
         data: T,
@@ -94,16 +82,23 @@ pub fn ManagedWithRef(comptime T: type) type {
         const Self = @This();
 
         pub fn deinit(self: *const Self) void {
+            if (comptime mode == .sec)
+                std.crypto.secureZero(u8, self.ref);
             self.allocator.free(self.ref);
         }
     };
 }
 
 /// Unmanaged data with references to data that *SHOULD* outlive it.
-pub fn Unmanaged(comptime U: type) type {
-    return struct {
-        data: U,
-    };
+pub fn Unmanaged(comptime T: type) type {
+    return struct { data: T };
+}
+
+pub fn shallow_copy(comptime T: type, dst: *T, comptime U: type, src: *const U) void {
+    // TODO: Assert T and U are structs;
+    inline for (comptime std.meta.fields(T)) |field| {
+        @field(dst, field.name) = @field(src, field.name);
+    }
 }
 
 pub fn print(src: []const u8) void {
@@ -136,8 +131,8 @@ pub fn print(src: []const u8) void {
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
 
-test FixedBufferWriter {
-    var fbw = try FixedBufferWriter.init(std.testing.allocator, 32);
+test ArrayWriter {
+    var fbw = try ArrayWriter.init(std.testing.allocator, 32);
     defer fbw.deinit();
 
     try expect_equal(4, try fbw.writer().write("AAAA"));
