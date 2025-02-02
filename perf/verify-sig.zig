@@ -24,7 +24,7 @@ pub fn main() !void {
     defer der.deinit();
 
     var buf = std.mem.zeroes([4096]u8);
-    var fixed_allocator = std.heap.FixedBufferAllocator.init(&buf);
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
 
     var timer = try std.time.Timer.start();
 
@@ -40,11 +40,8 @@ pub fn main() !void {
         sha.update(@embedFile("test.file"));
         sha.final(&hash);
 
-        var blob = try sshsig.get_signature_blob(
-            fixed_allocator.allocator(),
-            &hash,
-        );
-        blob.deinit();
+        const blob = try sshsig.get_signature_blob(fba.allocator(), &hash);
+        defer blob.deinit();
 
         std.mem.doNotOptimizeAway(try signature.verify(blob.ref, pk));
     }
