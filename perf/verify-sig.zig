@@ -2,6 +2,7 @@
 const std = @import("std");
 
 const zssh = @import("zssh");
+const perf = @import("perf.zig");
 
 const Pem = zssh.sig.SshSig.Pem;
 const PublicKey = std.crypto.sign.Ed25519.PublicKey;
@@ -13,14 +14,12 @@ const MAX_RUNS: usize = 0x01 << 16;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (gpa.deinit() == .leak) @panic("LEAK");
 
     const allocator = gpa.allocator();
 
-    defer if (gpa.deinit() == .leak) @panic("LEAK");
-
     const pem = try Pem.parse(@embedFile("test.file.sig"));
-
-    var der = try pem.decode(allocator);
+    const der = try pem.decode(allocator);
     defer der.deinit();
 
     var buf = std.mem.zeroes([4096]u8);
@@ -46,16 +45,5 @@ pub fn main() !void {
         std.mem.doNotOptimizeAway(try signature.verify(blob.ref, pk));
     }
 
-    const elapsed = timer.read();
-
-    std.debug.print("Verify SSHSIG\n\n", .{});
-
-    std.debug.print("{s:>15}   #{:>14} times\n", .{ "iterations", MAX_RUNS });
-    std.debug.print("{s:>15}   #{:>14} ns\n", .{ "average", elapsed / MAX_RUNS });
-    std.debug.print("{s:>15}   #{d:>14.2} /sec\n", .{
-        "per second",
-        1000000000 / (@as(f64, @floatFromInt(elapsed)) / MAX_RUNS),
-    });
-
-    std.debug.print("\n\n", .{});
+    perf.results("Verify SSHSIG", MAX_RUNS, timer.read());
 }
