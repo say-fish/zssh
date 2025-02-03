@@ -1,4 +1,5 @@
 - FIX pk.Pk (Public and private keys should be an enum)
+- Add fingerprints
 - Add examples
 - Support knownhosts
 - `zig build dist`
