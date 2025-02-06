@@ -4,11 +4,11 @@ const std = @import("std");
 const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
-const Pem = zssh.sig.SshSig.Pem;
+const Pem = zssh.openssh.signature.SshSig.Pem;
 const PublicKey = std.crypto.sign.Ed25519.PublicKey;
 const Sha512 = std.crypto.hash.sha2.Sha512;
 const Signature = std.crypto.sign.Ed25519.Signature;
-const SshSig = zssh.sig.SshSig;
+const SshSig = zssh.openssh.signature.SshSig;
 
 const MAX_RUNS: usize = 0x01 << 16;
 
@@ -32,8 +32,8 @@ pub fn main() !void {
 
         var hash: [Sha512.digest_length]u8 = undefined;
 
-        const signature = Signature.fromBytes(sshsig.signature.ed25519.sm[0..64].*);
-        const pk = try PublicKey.fromBytes(sshsig.publickey.ed25519.pk[0..32].*);
+        const signature = Signature.fromBytes(sshsig.signature.ed.sm[0..64].*);
+        const pk = try PublicKey.fromBytes(sshsig.publickey.ed.pk[0..32].*);
 
         var sha = Sha512.init(.{});
         sha.update(@embedFile("test.file"));

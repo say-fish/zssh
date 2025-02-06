@@ -3,10 +3,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const zssh = @import("zssh");
-const sig = zssh.sig;
+const sig = zssh.openssh.sinature;
 
-const SshSig = zssh.sig.SshSig;
-const Pem = SshSig.Pem;
+const SshSig = zssh.openssh.signature.SshSig;
+const Pem = zssh.openssh.signature.SshSig.Pem;
 
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
@@ -37,9 +37,9 @@ test "parse and verify SshSig" {
 
     if (comptime builtin.os.tag != .windows) {
         switch (sshsig.publickey) {
-            .ed25519 => |s| {
+            .ed => |s| {
                 const signature = std.crypto.sign
-                    .Ed25519.Signature.fromBytes(sshsig.signature.ed25519.sm[0..64].*);
+                    .Ed25519.Signature.fromBytes(sshsig.signature.ed.sm[0..64].*);
                 const pk = try std.crypto.sign
                     .Ed25519.PublicKey.fromBytes(s.pk[0..32].*);
 

@@ -3,11 +3,11 @@ const std = @import("std");
 
 const zssh = @import("zssh");
 
-const Ecdsa = zssh.pk.Ecdsa;
-const Ed25519 = zssh.pk.Ed25519;
-const Pem = zssh.pk.Pem;
-const Rsa = zssh.pk.Rsa;
-const Pk = zssh.pk.Pk;
+const Ecdsa = zssh.openssh.public.Ecdsa;
+const Ed25519 = zssh.openssh.public.Ed25519;
+const Pem = zssh.openssh.public.Key.Pem;
+const Rsa = zssh.openssh.public.Rsa;
+const Key = zssh.openssh.public.Key;
 
 const expect_equal = std.testing.expectEqual;
 const expect_equal_slices = std.testing.expectEqualSlices;
@@ -69,7 +69,7 @@ test "ed25519 public key with long comment" {
 }
 
 test "encode Ed25519" {
-    const key = try Pk.from_pem(
+    const key = try Key.from_pem(
         std.testing.allocator,
         try Pem.parse(@embedFile("ed25519-key.pub")),
     );

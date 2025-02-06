@@ -67,7 +67,7 @@ test "decode AddIdentity" {
         std.meta.activeTag(msg),
     );
     try expect_equal(
-        zssh.agent.Sk.ed25519,
+        zssh.agent.Sk.ed,
         std.meta.activeTag(msg.add_identity.key),
     );
 
@@ -110,7 +110,7 @@ test "decode Signature" {
 
     try expect_equal(Client.sign_request, std.meta.activeTag(msg));
     try expect_equal(
-        zssh.pk.Pk.ed25519,
+        zssh.openssh.public.Key.ed,
         std.meta.activeTag(msg.sign_request.key),
     );
     try expect_equal(@as(u32, 0x00), msg.sign_request.flags);
@@ -152,7 +152,7 @@ test "decode SignResponse" {
 
     try expect_equal(Agent.sign_response, std.meta.activeTag(msg));
     try expect_equal(
-        zssh.sig.Sig.ed25519,
+        zssh.openssh.signature.Signature.ed,
         std.meta.activeTag(msg.sign_response.signature),
     );
 
@@ -179,7 +179,7 @@ test "decode IdentitiesAnswer" {
     var it = msg.identities_answer.iter().?;
 
     while (try it.next()) |pk| {
-        try expect_equal(zssh.pk.Pk.ed25519, std.meta.activeTag(pk.key));
+        try expect_equal(zssh.openssh.public.Key.ed, std.meta.activeTag(pk.key));
     }
 
     std.debug.assert(it.done());
@@ -206,7 +206,7 @@ test "decode RemoveIdentity" {
     const msg = try decode(Client, &bytes);
 
     try expect_equal(Client.remove_identity, std.meta.activeTag(msg));
-    try expect_equal(zssh.pk.Pk.ed25519, std.meta.activeTag(msg.remove_identity.key));
+    try expect_equal(zssh.openssh.public.Key.ed, std.meta.activeTag(msg.remove_identity.key));
 }
 
 test "decode SignRequest" {
@@ -245,7 +245,7 @@ test "decode SignRequest" {
 
     try expect_equal(Client.sign_request, std.meta.activeTag(msg));
     try expect_equal(
-        zssh.pk.Pk.ed25519,
+        zssh.openssh.public.Key.ed,
         std.meta.activeTag(msg.sign_request.key),
     );
 

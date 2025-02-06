@@ -4,10 +4,10 @@ const std = @import("std");
 const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
-const Ed25519 = zssh.pk.Ed25519;
-const Pem = zssh.pk.Pem;
+const Ed25519 = zssh.openssh.public.Ed25519;
+const Pem = zssh.openssh.public.Key.Pem;
 
-const MAX_RUNS: usize = 0x01 << 26;
+const MAX_RUNS: usize = 0x01 << 32;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

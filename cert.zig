@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! SSH certificate parsing and verification.
+//! Generic SSH certificate.
 //!
 //! Support for parsing DER and PEM enconded SSH certificates. PEM decoding can
 //! be done in place or not. All parsing is done in place, with zero
@@ -26,7 +26,7 @@ pub const Error = error{
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
 
-fn MagicString(comptime T: type) type {
+pub fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
         T,
         enc.rfc4251.parse_string,
@@ -50,9 +50,12 @@ pub const Pem = struct {
         return try pem.parse(Self, src);
     }
 
-    pub fn decode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
-        const data =
-            try pem.decode_with_true_size(allocator, std.base64.standard.Decoder, self.der);
+    pub fn decode(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+        decoder: std.base64.Base64Decoder,
+    ) !Box([]u8, .plain) {
+        const data = try pem.decode(allocator, decoder, self.der);
 
         return .{ .allocator = allocator, .data = data };
     }
@@ -303,60 +306,14 @@ const Principals = struct {
     }
 };
 
-pub const Cert = union(enum) {
-    rsa: Rsa,
-    ecdsa: Ecdsa,
-    ed25519: Ed25519,
-
-    const Self = @This();
-
-    pub const Magic = MagicString(enum {
-        @"ssh-rsa-cert-v01@openssh.com",
-        @"rsa-sha2-256-cert-v01@openssh.com",
-        @"rsa-sha2-512-cert-v01@openssh.com",
-        @"ecdsa-sha2-nistp256-cert-v01@openssh.com",
-        @"ecdsa-sha2-nistp384-cert-v01@openssh.com",
-        @"ecdsa-sha2-nistp521-cert-v01@openssh.com",
-        @"ssh-ed25519-cert-v01@openssh.com",
-    });
-
-    fn from(magic: Magic.Value, src: []const u8) !Self {
-        return switch (magic) {
-            .@"ssh-rsa-cert-v01@openssh.com",
-            .@"rsa-sha2-256-cert-v01@openssh.com",
-            .@"rsa-sha2-512-cert-v01@openssh.com",
-            => .{ .rsa = try Rsa.from_bytes(src) },
-
-            .@"ecdsa-sha2-nistp256-cert-v01@openssh.com",
-            .@"ecdsa-sha2-nistp384-cert-v01@openssh.com",
-            .@"ecdsa-sha2-nistp521-cert-v01@openssh.com",
-            => .{ .ecdsa = try Ecdsa.from_bytes(src) },
-
-            .@"ssh-ed25519-cert-v01@openssh.com",
-            => .{ .ed25519 = try Ed25519.from_bytes(src) },
-        };
-    }
-
-    pub fn from_bytes(src: []const u8) !Self {
-        return Self.from((try Magic.from_bytes(src)).value, src);
-    }
-
-    pub fn from_pem(allocator: std.mem.Allocator, pem_enc: *const Pem) !BoxRef(Self, .plain) {
-        const magic = try Magic.from_slice(pem_enc.magic);
-
-        var der = try pem_enc.decode(allocator);
-        errdefer der.deinit();
-
-        return .{
-            .allocator = allocator,
-            .data = try Self.from(magic, der.data),
-            .ref = der.data,
-        };
-    }
-};
-
-fn GenericCert(comptime M: type, comptime T: type) type {
-    // TODO: assert T is a struct
+/// Generic type for a SSH certificate.
+pub fn GenericCert(
+    comptime M: type, // Magic preamble
+    comptime T: type, // Type of the public_key
+    comptime P: type, // Type of signature_key
+    comptime S: type, // Type of signature
+) type {
+    // TODO: assert TYPES is a struct
     return struct {
         magic: M,
         nonce: []const u8,
@@ -370,26 +327,30 @@ fn GenericCert(comptime M: type, comptime T: type) type {
         critical_options: Critical,
         extensions: Extensions,
         reserved: []const u8,
-        signature_key: pk.Pk,
-        signature: sig.Sig,
+        signature_key: Pk,
+        signature: Sig,
 
         const Self = @This();
 
         pub const Magic = M;
+        pub const Pk = P;
+        pub const Sig = S;
 
         fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
         }
 
-        pub fn from_pem(allocator: std.mem.Allocator, pem_enc: *const Pem) !BoxRef(Self, .plain) {
-            var der = try pem_enc.decode(allocator);
+        pub fn from_pem(
+            allocator: std.mem.Allocator,
+            decoder: std.base64.Base64Decoder,
+            pem_enc: *const Pem,
+        ) !BoxRef(Self, .plain) {
+            var der = try pem_enc.decode(allocator, decoder);
             errdefer der.deinit();
 
-            return .{
-                .allocator = allocator,
-                .data = try Self.from_bytes(der.data),
-                .ref = der.data,
-            };
+            const cert = try Self.from_bytes(der.data);
+
+            return .{ .allocator = allocator, .data = cert, .ref = der.data };
         }
 
         pub fn from_bytes(src: []const u8) Error!Self {
@@ -409,57 +370,3 @@ fn GenericCert(comptime M: type, comptime T: type) type {
         }
     };
 }
-
-pub const Rsa = GenericCert(MagicString(enum {
-    @"ssh-rsa-cert-v01@openssh.com",
-    @"rsa-sha2-256-cert-v01@openssh.com",
-    @"rsa-sha2-512-cert-v01@openssh.com",
-}), struct {
-    e: []const u8,
-    n: []const u8,
-
-    const Self = @This();
-
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-
-    pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size_struct(self);
-    }
-});
-
-pub const Ecdsa = GenericCert(MagicString(enum {
-    @"ecdsa-sha2-nistp256-cert-v01@openssh.com",
-    @"ecdsa-sha2-nistp384-cert-v01@openssh.com",
-    @"ecdsa-sha2-nistp521-cert-v01@openssh.com",
-}), struct {
-    curve: []const u8,
-    pk: []const u8,
-
-    const Self = @This();
-
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-
-    pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size_struct(self);
-    }
-});
-
-pub const Ed25519 = GenericCert(MagicString(enum {
-    @"ssh-ed25519-cert-v01@openssh.com",
-}), struct {
-    pk: []const u8,
-
-    const Self = @This();
-
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        return try enc.parse_with_cont(Self, src);
-    }
-
-    pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size_struct(self);
-    }
-});

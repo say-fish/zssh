@@ -4,11 +4,11 @@ const std = @import("std");
 const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
-const Pem = zssh.sig.SshSig.Pem;
+const Pem = zssh.openssh.signature.SshSig.Pem;
 const PublicKey = std.crypto.sign.Ed25519.PublicKey;
 const Sha512 = std.crypto.hash.sha2.Sha512;
 const Signature = std.crypto.sign.Ed25519.Signature;
-const SshSig = zssh.sig.SshSig;
+const SshSig = zssh.openssh.signature.SshSig;
 
 const MAX_RUNS: usize = 0x01 << 26;
 

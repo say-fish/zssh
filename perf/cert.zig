@@ -4,8 +4,8 @@ const std = @import("std");
 const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
-const Ed25519 = zssh.cert.Ed25519;
-const Pem = zssh.cert.Pem;
+const Ed25519 = zssh.openssh.cert.Ed25519;
+const Pem = zssh.openssh.cert.Pem;
 
 const MAX_RUNS: usize = 0x01 << 26;
 
@@ -16,7 +16,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const pem = try Pem.parse(@embedFile("ed25519-cert.pub"));
-    const der = try pem.decode(allocator);
+    const der = try pem.decode(allocator, std.base64.standard.Decoder);
     defer der.deinit();
 
     var timer = try std.time.Timer.start();

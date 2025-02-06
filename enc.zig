@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
-
 const mem = @import("mem.zig");
 
 pub const Error = error{
@@ -64,6 +63,17 @@ pub fn GenericMagicString(
 
         pub fn as_string(self: *const Self) []const u8 {
             return STRINGS[@intFromEnum(self.value)];
+        }
+
+        // FIXME:
+        pub fn from_iter(it: anytype) !Self {
+            const src = it.next() orelse
+                return error.InvalidFileFormat;
+
+            const ret = Self.from_slice(src) catch
+                return error.InvalidFileFormat;
+
+            return .{ .value = ret };
         }
 
         pub fn parse(src: []const u8) Error!Cont(Self) {

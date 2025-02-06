@@ -3,6 +3,7 @@ const std = @import("std");
 
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
+const openssh = @import("openssh.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 
@@ -179,9 +180,12 @@ pub const Pem = struct {
         return try pem.parse(Self, src);
     }
 
-    pub fn decode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+    pub fn decode(
+        self: *const Self,
+        allocator: std.mem.Allocator,
+    ) !Box([]u8, .sec) {
         const data =
-            try pem.decode_with_total_size(allocator, pem.base64.Decoder, self.der);
+            try pem.decode_with_ignore(allocator, pem.base64.Decoder, self.der);
 
         return .{ .allocator = allocator, .data = data };
     }
@@ -206,7 +210,7 @@ pub const Kdf = struct {
     }
 };
 
-pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
+pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
     return struct {
         magic: Magic,
         cipher: Cipher,
@@ -218,7 +222,6 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
 
         const Self = @This();
 
-        const P = Pub;
         const S = MakeSk(Pri);
 
         fn Optional(comptime T: type) type {
@@ -288,11 +291,11 @@ pub fn GenericSk(comptime Pub: type, comptime Pri: type) type {
             return !(std.mem.eql(u8, self.cipher.name, "none") and self.kdf.opt == null);
         }
 
-        pub fn get_public_key(self: *const Self) !P {
-            if (!@hasDecl(Pub, "from_bytes"))
+        pub fn get_public_key(self: *const Self) !Pk {
+            if (!@hasDecl(Pk, "from_bytes"))
                 @compileError("Type `Pub` does not declare `from_bytes([]const u8)`");
 
-            return Pub.from_bytes(self.public_key_blob);
+            return Pk.from_bytes(self.public_key_blob);
         }
 
         pub fn get_private_key(
@@ -440,6 +443,6 @@ pub const wire = struct {
     };
 };
 
-pub const Rsa = GenericSk(pk.Rsa, wire.Rsa);
-pub const Ecdsa = GenericSk(pk.Ecdsa, wire.Ecdsa);
-pub const Ed25519 = GenericSk(pk.Ed25519, wire.Ed25519);
+pub const Rsa = GenericSk(openssh.public.Key, wire.Rsa);
+pub const Ecdsa = GenericSk(openssh.public.Key, wire.Ecdsa);
+pub const Ed25519 = GenericSk(openssh.public.Key, wire.Ed25519);

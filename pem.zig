@@ -7,7 +7,8 @@ pub fn Literal(comptime L: []const u8, comptime I: type) type {
         const PREAMBLE = L;
 
         const Self = @This();
-        pub fn parse(it: *I) !Self {
+
+        pub fn from_iter(it: *I) !Self {
             const src = it.next() orelse
                 return error.InvalidFileFormat;
 
@@ -26,7 +27,7 @@ pub fn Blob(comptime I: type) type {
 
         const Self = @This();
 
-        pub fn parse(it: *I) !Self {
+        pub fn from_iter(it: *I) !Self {
             const src = it.rest();
 
             return .{ .ref = src };
@@ -48,9 +49,9 @@ pub fn parse(comptime T: type, src: []const u8) !T {
 
     inline for (comptime std.meta.fields(T)) |field| {
         if (@typeInfo(field.type) == .@"struct" and
-            @hasDecl(field.type, "parse"))
+            @hasDecl(field.type, "from_iter"))
         {
-            @field(ret, field.name) = try field.type.parse(&it);
+            @field(ret, field.name) = try field.type.from_iter(&it);
 
             continue;
         }
@@ -60,16 +61,16 @@ pub fn parse(comptime T: type, src: []const u8) !T {
 
         @field(ret, field.name) = switch (field.type) {
             []const u8 => ref,
-            else => @panic("Wrong type"),
+            else => @compileError("cannot parse type " ++ @typeName(field.type)),
         };
     }
 
     return ret;
 }
 
-pub fn decode_with_true_size(
+pub fn decode(
     allocator: std.mem.Allocator,
-    decoder: anytype,
+    decoder: std.base64.Base64Decoder,
     src: []const u8,
 ) ![]u8 {
     const len = try decoder.calcSizeForSlice(src);
@@ -84,9 +85,9 @@ pub fn decode_with_true_size(
 
 /// Since Zig's `Base64DecoderWithIgnore` does not support `calcSizeForSlice`
 /// we need to alloc twice in order to get the actual decoded size.
-pub fn decode_with_total_size(
+pub fn decode_with_ignore(
     allocator: std.mem.Allocator,
-    decoder: anytype,
+    decoder: std.base64.Base64DecoderWithIgnore,
     src: []const u8,
 ) ![]u8 {
     const len = try decoder.calcSizeUpperBound(src.len);

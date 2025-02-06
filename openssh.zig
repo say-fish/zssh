@@ -1,0 +1,543 @@
+const std = @import("std");
+const mem = @import("mem.zig");
+const enc = @import("enc.zig");
+
+const Box = mem.Box;
+const BoxRef = mem.BoxRef;
+
+pub const cert = struct {
+    const gen = @import("cert.zig");
+    const pk = @import("pk.zig");
+    const sig = @import("sig.zig");
+
+    pub const Pem = gen.Pem;
+
+    // TODO: Move to another namespace
+    fn OpenSSHCert(comptime M: type, comptime T: type) type {
+        return gen.GenericCert(M, T, public.Key, signature.Signature);
+    }
+
+    pub const Rsa = OpenSSHCert(gen.MagicString(enum {
+        @"ssh-rsa-cert-v01@openssh.com",
+        @"rsa-sha2-256-cert-v01@openssh.com",
+        @"rsa-sha2-512-cert-v01@openssh.com",
+    }), struct {
+        e: []const u8,
+        n: []const u8,
+
+        const Self = @This();
+
+        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
+        }
+    });
+
+    pub const Ecdsa = OpenSSHCert(gen.MagicString(enum {
+        @"ecdsa-sha2-nistp256-cert-v01@openssh.com",
+        @"ecdsa-sha2-nistp384-cert-v01@openssh.com",
+        @"ecdsa-sha2-nistp521-cert-v01@openssh.com",
+    }), struct {
+        curve: []const u8,
+        pk: []const u8,
+
+        const Self = @This();
+
+        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
+        }
+    });
+
+    pub const Ed25519 = OpenSSHCert(gen.MagicString(enum {
+        @"ssh-ed25519-cert-v01@openssh.com",
+    }), struct {
+        pk: []const u8,
+
+        const Self = @This();
+
+        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
+        }
+    });
+
+    pub const Cert = union(enum) {
+        rsa: Rsa,
+        ecdsa: Ecdsa,
+        ed25519: Ed25519,
+
+        const Self = @This();
+
+        pub const Magic = gen.MagicString(enum {
+            @"ssh-rsa-cert-v01@openssh.com",
+            @"rsa-sha2-256-cert-v01@openssh.com",
+            @"rsa-sha2-512-cert-v01@openssh.com",
+            @"ecdsa-sha2-nistp256-cert-v01@openssh.com",
+            @"ecdsa-sha2-nistp384-cert-v01@openssh.com",
+            @"ecdsa-sha2-nistp521-cert-v01@openssh.com",
+            @"ssh-ed25519-cert-v01@openssh.com",
+        });
+
+        fn from(magic: Magic.Value, src: []const u8) !Self {
+            return switch (magic) {
+                .@"ssh-rsa-cert-v01@openssh.com",
+                .@"rsa-sha2-256-cert-v01@openssh.com",
+                .@"rsa-sha2-512-cert-v01@openssh.com",
+                => .{ .rsa = try Rsa.from_bytes(src) },
+
+                .@"ecdsa-sha2-nistp256-cert-v01@openssh.com",
+                .@"ecdsa-sha2-nistp384-cert-v01@openssh.com",
+                .@"ecdsa-sha2-nistp521-cert-v01@openssh.com",
+                => .{ .ecdsa = try Ecdsa.from_bytes(src) },
+
+                .@"ssh-ed25519-cert-v01@openssh.com",
+                => .{ .ed25519 = try Ed25519.from_bytes(src) },
+            };
+        }
+
+        pub fn from_bytes(src: []const u8) !Self {
+            return Self.from((try Magic.from_bytes(src)).value, src);
+        }
+
+        pub fn from_pem(
+            allocator: std.mem.Allocator,
+            decoder: std.base64.Base64Decoder,
+            pem: *const Pem,
+        ) !BoxRef(Self, .plain) {
+            const magic = try Magic.from_slice(pem.magic);
+
+            var der = try pem.decode(allocator, decoder);
+            errdefer der.deinit();
+
+            const cer = try Self.from(magic, der.data);
+
+            return .{ .allocator = allocator, .data = cer, .ref = der.data };
+        }
+    };
+};
+
+pub const public = struct {
+    const gen = @import("pk.zig");
+
+    pub const Error = gen.Error;
+
+    pub const Rsa = struct {
+        magic: Magic,
+        e: []const u8, // TODO: mpint
+        n: []const u8, // TODO: mpint
+
+        const Self = @This();
+
+        const Magic = gen.Magic(enum { @"ssh-rsa" });
+
+        fn from(src: []const u8) Error!Rsa {
+            return try enc.parse(Self, src);
+        }
+
+        pub fn from_bytes(src: []const u8) Error!Rsa {
+            return try Self.from(src);
+        }
+
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+            return try enc.encode_value(Self, allocator, self, .plain);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
+        }
+
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+    };
+
+    pub const Ecdsa = struct {
+        magic: Magic,
+        curve: []const u8,
+        pk: []const u8,
+
+        const Self = @This();
+
+        const Magic = gen.Magic(enum {
+            @"ecdsa-sha2-nistp256",
+            @"ecdsa-sha2-nistp384",
+            @"ecdsa-sha2-nistp521",
+        });
+
+        fn from(src: []const u8) Error!Ecdsa {
+            return try enc.parse(Self, src);
+        }
+
+        pub fn from_bytes(src: []const u8) Error!Ecdsa {
+            return try Self.from(src);
+        }
+
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+            return enc.encode_value(Self, allocator, self, .plain);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
+        }
+
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+    };
+
+    pub const Ed25519 = struct {
+        magic: Magic,
+        pk: []const u8,
+
+        const Self = @This();
+
+        pub const Magic = gen.Magic(enum { @"ssh-ed25519" });
+
+        fn from(src: []const u8) Error!Ed25519 {
+            return try enc.parse(Self, src);
+        }
+
+        pub fn from_bytes(src: []const u8) Error!Ed25519 {
+            return try Self.from(src);
+        }
+
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+            return enc.encode_value(Self, allocator, self, .plain);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(self);
+        }
+
+        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+    };
+
+    pub const Key = union(enum) {
+        rsa: Rsa,
+        ecdsa: Ecdsa,
+        ed: Ed25519,
+
+        const Self = @This();
+
+        pub const Pem = gen.Pem(Magic);
+        pub const Magic = gen.Magic(enum {
+            @"ssh-rsa",
+            @"ecdsa-sha2-nistp256",
+            @"ecdsa-sha2-nistp384",
+            @"ecdsa-sha2-nistp521",
+            @"ssh-ed25519",
+        });
+
+        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Key) {
+            const next, const key = try enc.rfc4251.parse_string(src);
+
+            return .{ next, Self.from_bytes(key) catch return Error.InvalidData };
+        }
+
+        pub fn from(magic: Magic.Value, src: []const u8) !Self {
+            return switch (magic) {
+                .@"ssh-rsa",
+                => .{ .rsa = try Rsa.from_bytes(src) },
+
+                .@"ecdsa-sha2-nistp256",
+                .@"ecdsa-sha2-nistp384",
+                .@"ecdsa-sha2-nistp521",
+                => .{ .ecdsa = try Ecdsa.from_bytes(src) },
+
+                .@"ssh-ed25519",
+                => .{ .ed = try Ed25519.from_bytes(src) },
+            };
+        }
+
+        pub fn from_bytes(src: []const u8) !Self {
+            return Self.from((try Magic.from_bytes(src)).value, src);
+        }
+
+        pub fn from_pem(allocator: std.mem.Allocator, pem_enc: Pem) !BoxRef(Self, .plain) {
+            const der = try pem_enc.decode(allocator);
+            errdefer der.deinit();
+
+            return .{
+                .allocator = allocator,
+                .data = try Self.from(pem_enc.magic.value, der.data),
+                .ref = der.data,
+            };
+        }
+
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+            return switch (self.*) {
+                inline else => |value| value.encode(allocator),
+            };
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return switch (self.*) {
+                inline else => |value| enc.encoded_size(value),
+            };
+        }
+    };
+};
+
+pub const signature = struct {
+    const gen = @import("sig.zig");
+
+    /// The resulting signature is encoded as follows:
+    ///
+    ///     string   "rsa-sha2-256" / "rsa-sha2-512"
+    ///     string    rsa_signature_blob
+    ///
+    ///   The value for 'rsa_signature_blob' is encoded as a string that contains
+    ///   an octet string S (which is the output of RSASSA-PKCS1-v1_5) and that
+    ///   has the same length (in octets) as the RSA modulus.  When S contains
+    ///   leading zeros, there exist signers that will send a shorter encoding of
+    ///   S that omits them.  A verifier MAY accept shorter encodings of S with
+    ///   one or more leading zeros omitted.
+    pub const rfc8332 = struct {
+        magic: Magic,
+        blob: []const u8,
+
+        const Self = @This();
+
+        const Magic = gen.Magic(enum(u1) {
+            @"rsa-sha2-256",
+            @"rsa-sha2-512",
+        });
+
+        fn from(src: []const u8) enc.Error!Self {
+            return try enc.parse(Self, src);
+        }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            const next, const sig = try enc.rfc4251.parse_string(src);
+
+            return .{ next, try Self.from(sig) };
+        }
+    };
+
+    /// Signatures are encoded as follows:
+    ///
+    ///     string   "ecdsa-sha2-[identifier]"
+    ///     string   ecdsa_signature_blob
+    ///
+    ///   The string [identifier] is the identifier of the elliptic curve
+    ///   domain parameters.
+    ///
+    ///   The ecdsa_signature_blob value has the following specific encoding:
+    ///
+    ///     mpint    r
+    ///     mpint    s
+    ///
+    ///   The integers r and s are the output of the ECDSA algorithm.
+    pub const rfc5656 = struct {
+        magic: Magic,
+        blob: struct {
+            r: []const u8,
+            s: []const u8,
+
+            const Blob = @This();
+
+            fn from(src: []const u8) enc.Error!Blob {
+                return try enc.parse(Blob, src);
+            }
+
+            pub fn parse(src: []const u8) enc.Error!enc.Cont(Blob) {
+                const next, const blob = try enc.rfc4251.parse_string(src);
+
+                return .{ next, try Blob.from(blob) };
+            }
+        },
+
+        const Self = @This();
+
+        const Magic = gen.Magic(enum {
+            @"ecdsa-sha2-nistp256",
+            @"ecdsa-sha2-nistp512",
+        });
+
+        fn from(src: []const u8) enc.Error!Self {
+            return try enc.parse(Self, src);
+        }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            const next, const sig = try enc.rfc4251.parse_string(src);
+
+            return .{ next, try Self.from(sig) };
+        }
+    };
+
+    /// The EdDSA signature of a message M under a private key k is defined as the
+    /// PureEdDSA signature of PH(M). In other words, EdDSA simply uses PureEdDSA
+    /// to sign PH(M).
+    pub const rfc8032 = struct {
+        magic: Magic,
+        sm: []const u8,
+
+        const Self = @This();
+
+        pub const Magic = gen.Magic(enum(u1) { @"ssh-ed25519" });
+
+        fn from(src: []const u8) enc.Error!Self {
+            return try enc.parse(Self, src);
+        }
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            const next, const sig = try enc.rfc4251.parse_string(src);
+
+            return .{ next, try Self.from(sig) };
+        }
+    };
+
+    pub const Signature = union(enum(u2)) {
+        rsa: rfc8332,
+        ecdsa: rfc5656,
+        ed: rfc8032,
+
+        const Self = @This();
+
+        pub const Magic = gen.Magic(enum {
+            @"rsa-sha2-256",
+            @"rsa-sha2-512",
+            @"ecdsa-sha2-nistp256",
+            @"ecdsa-sha2-nistp512",
+            @"ssh-ed25519",
+        });
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Signature) {
+            const next, const key = try enc.rfc4251.parse_string(src);
+
+            return .{ next, Self.from_bytes(key) catch return error.InvalidData };
+        }
+
+        pub fn from_bytes(src: []const u8) !Signature {
+            _, const magic = try enc.rfc4251.parse_string(src);
+
+            return switch (try Magic.from_slice(magic)) {
+                .@"rsa-sha2-256", .@"rsa-sha2-512" => return .{
+                    .rsa = try rfc8332.from(src),
+                },
+
+                .@"ecdsa-sha2-nistp256", .@"ecdsa-sha2-nistp512" => return .{
+                    .ecdsa = try rfc5656.from(src),
+                },
+
+                .@"ssh-ed25519" => return .{
+                    .ed = try rfc8032.from(src),
+                },
+            };
+        }
+    };
+
+    pub const SshSig = struct {
+        /// Magic string, must be "SSHSIG"
+        preamble: Preamble,
+        /// Verifiers MUST reject signatures with versions greater than those
+        /// they support.
+        version: u32,
+        /// See: `zssh.pk.Pk`
+        publickey: public.Key,
+        /// The purpose of the namespace value is to specify a unambiguous
+        /// interpretation domain for the signature, e.g. file signing. This
+        /// prevents cross-protocol attacks caused by signatures intended for
+        /// one intended domain being accepted in another.
+        ///
+        /// The namespace value **MUST NOT** be the empty string.
+        namespace: []const u8,
+        /// The reserved value is present to encode future information (e.g.
+        /// tags) into the signature. Implementations should ignore the
+        /// reserved field if it is not empty.
+        reserved: []const u8,
+        /// The supported hash algorithms are "sha256" and "sha512".
+        hash_algorithm: HashAlgorithm,
+        /// The signature.
+        signature: Signature,
+
+        const Self = @This();
+        pub const Pem = gen.Pem("BEGIN SSH SIGNATURE", "END SSH SIGNATURE");
+        pub const Preamble = gen.Preamble(enum { SSHSIG });
+        pub const HashAlgorithm = gen.Magic(enum { sha256, sha512 });
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            return try enc.parse_with_cont(Self, src);
+        }
+
+        fn from(src: []const u8) !Self {
+            return try enc.parse(Self, src);
+        }
+
+        pub fn from_bytes(src: []const u8) !Self {
+            return try Self.from(src);
+        }
+
+        pub fn from_pem(allocator: std.mem.Allocator, encoded_pem: *const Pem) !BoxRef(Self, .sec) {
+            var der = try encoded_pem.decode(allocator);
+            errdefer der.deinit();
+
+            return .{
+                .allocator = allocator,
+                .data = try Self.from_bytes(der.data),
+                .ref = der.data,
+            };
+        }
+
+        pub const Blob = struct {
+            preamble: Preamble,
+            namespace: []const u8,
+            reserved: []const u8,
+            hash_algorithm: HashAlgorithm,
+            hmsg: []const u8,
+
+            fn from(src: []const u8) !Blob {
+                return try enc.parse(Blob, src);
+            }
+
+            pub fn from_bytes(src: []const u8) !Blob {
+                return try Blob.from(src);
+            }
+        };
+
+        pub fn get_signature_blob(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+            hmsg: []const u8,
+        ) !BoxRef(Blob, .sec) {
+            const len = self.preamble.encoded_size() +
+                enc.rfc4251.encoded_size(self.namespace) +
+                enc.rfc4251.encoded_size(self.reserved) +
+                self.hash_algorithm.encoded_size() +
+                @sizeOf(u32) + hmsg.len;
+
+            var writer = try mem.ArrayWriter.init(allocator, len);
+            errdefer writer.deinit();
+
+            try self.preamble.serialize(writer.writer().any());
+            try enc.serialize_any([]const u8, writer.writer().any(), self.namespace);
+            try enc.serialize_any([]const u8, writer.writer().any(), self.reserved);
+            try self.hash_algorithm.serialize(writer.writer().any());
+            try enc.serialize_any([]const u8, writer.writer().any(), hmsg);
+
+            std.debug.assert(writer.head == len);
+
+            return .{
+                .data = try Blob.from_bytes(writer.mem),
+                .allocator = allocator,
+                .ref = writer.mem,
+            };
+        }
+
+        pub fn encoded_size() u32 {
+            @panic("TODO");
+        }
+    };
+};

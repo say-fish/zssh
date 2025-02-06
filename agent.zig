@@ -8,11 +8,13 @@
 
 const std = @import("std");
 
+const enc = @import("enc.zig");
 const pk = @import("pk.zig");
+const sig = @import("sig.zig");
 const sk = @import("sk.zig");
 
-const enc = @import("enc.zig");
-const sig = @import("sig.zig");
+// FIXME:
+const openssh = @import("openssh.zig");
 
 fn msg_from_bytes(comptime T: type, src: []const u8) !T {
     if (src.len < @sizeOf(u32))
@@ -83,7 +85,7 @@ pub const Agent = union(enum(u8)) {
         const Self = @This();
 
         pub const Pk = struct {
-            key: pk.Pk,
+            key: openssh.public.Key,
             comment: []const u8,
 
             pub fn parse(src: []const u8) enc.Error!enc.Cont(Pk) {
@@ -109,7 +111,7 @@ pub const Agent = union(enum(u8)) {
     };
 
     const SignResponse = struct {
-        signature: sig.Sig,
+        signature: openssh.signature.Signature,
 
         const Self = @This();
 
@@ -207,7 +209,7 @@ pub const Client = union(enum(u8)) {
 
     /// TODO: data
     const SignRequest = struct {
-        key: pk.Pk,
+        key: openssh.public.Key,
         data: []const u8,
         flags: u32,
 
@@ -233,7 +235,7 @@ pub const Client = union(enum(u8)) {
     };
 
     pub const RemoveIdentity = struct {
-        key: pk.Pk,
+        key: openssh.public.Key,
 
         const Self = @This();
 
@@ -384,9 +386,9 @@ pub const openssh_extensions = struct {
         @"session-bind@openssh.com": SessionBind,
 
         pub const SessionBind = struct {
-            hostkey: pk.Pk,
+            hostkey: openssh.public.Key,
             identifier: []const u8,
-            signature: sig.Sig,
+            signature: openssh.signature.Signature,
             is_forwarding: u8,
 
             const Self = @This();
@@ -427,11 +429,11 @@ pub const openssh_extensions = struct {
 pub const Sk = union(enum) {
     rsa: sk.wire.Rsa,
     ecdsa: sk.wire.Ecdsa,
-    ed25519: sk.wire.Ed25519,
+    ed: sk.wire.Ed25519,
 
     const Self = @This();
 
-    const Magic = pk.Pk.Magic;
+    const Magic = openssh.public.Key.Magic;
 
     pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         const magic = Magic.from_bytes(src) catch return error.InvalidData;
@@ -460,7 +462,7 @@ pub const Sk = union(enum) {
                 const next, const key =
                     try enc.parse_with_cont(sk.wire.Ed25519, src);
 
-                return .{ next, .{ .ed25519 = key } };
+                return .{ next, .{ .ed = key } };
             },
         }
     }
