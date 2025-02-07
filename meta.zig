@@ -15,7 +15,10 @@ pub fn All(comptime T: type, comptime preds: anytype) type {
     // const fields_info = @typeInfo(@TypeOf(preds)).@"struct".fields;
 
     for (std.meta.fields(@TypeOf(preds))) |field| {
-        _ = @as(*field.type, @constCast(@ptrCast(field.default_value_ptr.?)))(T);
+        _ = @as(
+            *field.type,
+            @alignCast(@constCast(@ptrCast(field.default_value_ptr.?))),
+        )(T);
     }
 
     return T;
