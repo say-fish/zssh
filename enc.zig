@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
+
 const mem = @import("mem.zig");
+const meta = @import("meta.zig");
 
 pub const Error = error{
     /// Invalid RFC-4251 integer
@@ -23,6 +25,23 @@ pub const Error = error{
 
 const Box = mem.Box;
 const Mode = mem.Mode;
+
+pub fn Dec(comptime T: type) type {
+    return meta.has_decl(T, "parse", fn ([]const u8) Error!Cont(T));
+}
+
+pub fn Enc(comptime T: type) type {
+    const encode_type =
+        fn (*const T, std.mem.Allocator) Error!meta.member(T, "Box");
+
+    const encoded_size_type = fn (*const T) u32;
+    _ = meta.has_decl(T, "encode", encode_type);
+    return meta.has_decl(T, "encoded_size", encoded_size_type);
+}
+
+pub fn From(comptime T: type) type {
+    return T;
+}
 
 pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
@@ -47,6 +66,7 @@ pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
 /// * f must have this signature: `fn f([]const u8) Error!Cont(T)`.
 pub fn GenericMagicString(
     comptime T: type,
+    comptime I: type,
     f: anytype,
     x: anytype,
 ) type {
@@ -58,6 +78,7 @@ pub fn GenericMagicString(
 
         const Self = @This();
         pub const Value = T;
+        pub const Iterator = I;
 
         const STRINGS = enum_to_str(T);
 
@@ -66,7 +87,7 @@ pub fn GenericMagicString(
         }
 
         // FIXME:
-        pub fn from_iter(it: anytype) !Self {
+        pub fn from_iter(it: *Iterator) @import("pem.zig").Error!Self {
             const src = it.next() orelse
                 return error.InvalidFileFormat;
 
@@ -373,6 +394,7 @@ const expect_equal_strings = std.testing.expectEqualStrings;
 test "GenericMagicString `encoded_size`" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_31 },
+        std.mem.TokenIterator(u8, .any),
         rfc4251.parse_string,
         rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_31 };
@@ -383,6 +405,7 @@ test "GenericMagicString `encoded_size`" {
 test "GenericMagicString `encoded_size` (read_null_terminated)" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_28 },
+        std.mem.TokenIterator(u8, .any),
         parse_null_terminated_str,
         null_terminated_str_encoded_size,
     ){ .value = .this_is_a_test_with_size_28 };
@@ -452,6 +475,7 @@ test "encode [6]u8 (fixed size string)" {
 test "serialize GenericMagicString" {
     const magic = GenericMagicString(
         enum { this_is_a_test_with_size_42 },
+        std.mem.TokenIterator(u8, .any),
         rfc4251.parse_string,
         rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_42 };

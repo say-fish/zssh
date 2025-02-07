@@ -20,9 +20,12 @@ pub const Error = error{
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
 
+const I = std.mem.TokenIterator(u8, .sequence);
+
 fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
         T,
+        I,
         enc.parse_null_terminated_str,
         enc.null_terminated_str_encoded_size,
     );
@@ -89,7 +92,7 @@ pub const Checksum = struct {
             @as(u32, @truncate(value));
     }
 
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
         const next, const checksum = try enc.rfc4251.parse_int(u64, src);
 
         // XXX: This is not realy great
@@ -142,7 +145,7 @@ pub const Cipher = struct {
         return ret;
     }
 
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Cipher) {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Cipher) {
         const next, const name = try enc.rfc4251.parse_string(src);
 
         inline for (comptime Self.ciphers) |cipher| {
@@ -170,14 +173,14 @@ pub const Pem = struct {
     suf: pem.Literal("END OPENSSH PRIVATE KEY", TokenIterator),
 
     const Self = @This();
-    const TokenIterator = std.mem.TokenIterator(u8, .sequence);
+    pub const TokenIterator = I;
 
-    pub fn tokenize(src: []const u8) TokenIterator {
+    pub inline fn tokenize(src: []const u8) TokenIterator {
         return std.mem.tokenizeSequence(u8, src, "-----");
     }
 
     pub fn parse(src: []const u8) !Self {
-        return try pem.parse(Self, src);
+        return try pem.parse(Self, undefined, src);
     }
 
     pub fn decode(
@@ -197,7 +200,7 @@ pub const Kdf = struct {
 
     const Self = @This();
 
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Kdf) {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Kdf) {
         return try enc.parse_with_cont(Self, src);
     }
 

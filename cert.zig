@@ -9,10 +9,11 @@
 
 const std = @import("std");
 
+const enc = @import("enc.zig");
 const mem = @import("mem.zig");
+const meta = @import("meta.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
-const enc = @import("enc.zig");
 const sig = @import("sig.zig");
 
 pub const Error = error{
@@ -26,9 +27,14 @@ pub const Error = error{
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
 
+const All = meta.All;
+
+const I = std.mem.TokenIterator(u8, .any);
+
 pub fn MagicString(comptime T: type) type {
     return enc.GenericMagicString(
         T,
+        I,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     );
@@ -40,14 +46,14 @@ pub const Pem = struct {
     comment: pem.Blob(TokenIterator),
 
     const Self = @This();
-    const TokenIterator = std.mem.TokenIterator(u8, .any);
+    pub const TokenIterator = I;
 
     pub inline fn tokenize(src: []const u8) TokenIterator {
         return std.mem.tokenizeAny(u8, src, " ");
     }
 
     pub fn parse(src: []const u8) !Self {
-        return try pem.parse(Self, src);
+        return try pem.parse(Self, undefined, src);
     }
 
     pub fn decode(
@@ -67,7 +73,7 @@ pub const CertType = enum(u2) {
 
     const Self = @This();
 
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(CertType) {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(CertType) {
         const next, const val = try enc.rfc4251.parse_int(u32, src);
 
         return .{ next, @enumFromInt(val) };
@@ -132,7 +138,7 @@ pub const Critical = struct {
         kind: Kind,
         value: []const u8,
 
-        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Option) {
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Option) {
             const next, const kind = try Kind.parse(src);
 
             const final, const buf = try enc.rfc4251.parse_string(src[next..]);
@@ -143,7 +149,7 @@ pub const Critical = struct {
         }
     };
 
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Critical) {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Critical) {
         return try enc.parse_with_cont(Self, src);
     }
 
@@ -240,7 +246,7 @@ pub const Extensions = struct {
         }
     };
 
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Extensions) {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Extensions) {
         return try enc.parse_with_cont(Self, src);
     }
 
@@ -295,7 +301,7 @@ const Principals = struct {
         return .{ .ref = self.ref };
     }
 
-    pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Principals) {
+    pub fn parse(src: []const u8) enc.Error!enc.Cont(Principals) {
         const next, const ref = try enc.rfc4251.parse_string(src);
 
         return .{ next, .{ .ref = ref } };
@@ -309,7 +315,8 @@ const Principals = struct {
 /// Generic type for a SSH certificate.
 pub fn GenericCert(
     comptime M: type, // Magic preamble
-    comptime T: type, // Type of the public_key
+    comptime T: type,
+    _: All(T, .{ enc.Dec, enc.Enc }), // Type of the public_key
     comptime P: type, // Type of signature_key
     comptime S: type, // Type of signature
 ) type {

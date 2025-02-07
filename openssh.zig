@@ -2,9 +2,6 @@ const std = @import("std");
 const mem = @import("mem.zig");
 const enc = @import("enc.zig");
 
-const Box = mem.Box;
-const BoxRef = mem.BoxRef;
-
 pub const cert = struct {
     const gen = @import("cert.zig");
     const pk = @import("pk.zig");
@@ -14,7 +11,7 @@ pub const cert = struct {
 
     // TODO: Move to another namespace
     fn OpenSSHCert(comptime M: type, comptime T: type) type {
-        return gen.GenericCert(M, T, public.Key, signature.Signature);
+        return gen.GenericCert(M, T, undefined, public.Key, signature.Signature);
     }
 
     pub const Rsa = OpenSSHCert(gen.MagicString(enum {
@@ -27,8 +24,17 @@ pub const cert = struct {
 
         const Self = @This();
 
-        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub const Box = mem.Box(Self, .plain);
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) enc.Error!Box {
+            return enc.encode_value(Self, allocator, self, .plain);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
@@ -46,8 +52,17 @@ pub const cert = struct {
 
         const Self = @This();
 
-        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub const Box = mem.Box(Self, .plain);
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) enc.Error!Box {
+            return enc.encode_value(Self, allocator, self, .plain);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
@@ -62,8 +77,17 @@ pub const cert = struct {
 
         const Self = @This();
 
-        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub const Box = mem.Box(Self, .plain);
+
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) enc.Error!Box {
+            return enc.encode_value(Self, allocator, self, .plain);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
@@ -77,7 +101,7 @@ pub const cert = struct {
         ed25519: Ed25519,
 
         const Self = @This();
-
+        pub const Box = mem.BoxRef(Self, .plain);
         pub const Magic = gen.MagicString(enum {
             @"ssh-rsa-cert-v01@openssh.com",
             @"rsa-sha2-256-cert-v01@openssh.com",
@@ -113,7 +137,7 @@ pub const cert = struct {
             allocator: std.mem.Allocator,
             decoder: std.base64.Base64Decoder,
             pem: *const Pem,
-        ) !BoxRef(Self, .plain) {
+        ) !Box {
             const magic = try Magic.from_slice(pem.magic);
 
             var der = try pem.decode(allocator, decoder);
@@ -138,17 +162,18 @@ pub const public = struct {
 
         const Self = @This();
 
-        const Magic = gen.Magic(enum { @"ssh-rsa" });
+        pub const Box = mem.Box([]u8, .plain);
+        pub const Magic = gen.Magic(enum { @"ssh-rsa" });
 
-        fn from(src: []const u8) Error!Rsa {
+        fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
         }
 
-        pub fn from_bytes(src: []const u8) Error!Rsa {
+        pub fn from_bytes(src: []const u8) Error!Self {
             return try Self.from(src);
         }
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box {
             return try enc.encode_value(Self, allocator, self, .plain);
         }
 
@@ -168,21 +193,22 @@ pub const public = struct {
 
         const Self = @This();
 
-        const Magic = gen.Magic(enum {
+        pub const Box = mem.Box([]u8, .plain);
+        pub const Magic = gen.Magic(enum {
             @"ecdsa-sha2-nistp256",
             @"ecdsa-sha2-nistp384",
             @"ecdsa-sha2-nistp521",
         });
 
-        fn from(src: []const u8) Error!Ecdsa {
+        fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
         }
 
-        pub fn from_bytes(src: []const u8) Error!Ecdsa {
+        pub fn from_bytes(src: []const u8) Error!Self {
             return try Self.from(src);
         }
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box {
             return enc.encode_value(Self, allocator, self, .plain);
         }
 
@@ -202,6 +228,7 @@ pub const public = struct {
         const Self = @This();
 
         pub const Magic = gen.Magic(enum { @"ssh-ed25519" });
+        pub const Box = mem.Box([]u8, .plain);
 
         fn from(src: []const u8) Error!Ed25519 {
             return try enc.parse(Self, src);
@@ -211,7 +238,7 @@ pub const public = struct {
             return try Self.from(src);
         }
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box {
             return enc.encode_value(Self, allocator, self, .plain);
         }
 
@@ -232,6 +259,8 @@ pub const public = struct {
         const Self = @This();
 
         pub const Pem = gen.Pem(Magic);
+        pub const Box = mem.Box([]u8, .plain);
+        pub const BoxRef = mem.BoxRef(Self, .plain);
         pub const Magic = gen.Magic(enum {
             @"ssh-rsa",
             @"ecdsa-sha2-nistp256",
@@ -240,7 +269,7 @@ pub const public = struct {
             @"ssh-ed25519",
         });
 
-        pub inline fn parse(src: []const u8) enc.Error!enc.Cont(Key) {
+        pub fn parse(src: []const u8) enc.Error!enc.Cont(Key) {
             const next, const key = try enc.rfc4251.parse_string(src);
 
             return .{ next, Self.from_bytes(key) catch return Error.InvalidData };
@@ -265,7 +294,7 @@ pub const public = struct {
             return Self.from((try Magic.from_bytes(src)).value, src);
         }
 
-        pub fn from_pem(allocator: std.mem.Allocator, pem_enc: Pem) !BoxRef(Self, .plain) {
+        pub fn from_pem(allocator: std.mem.Allocator, pem_enc: Pem) !BoxRef {
             const der = try pem_enc.decode(allocator);
             errdefer der.deinit();
 
@@ -276,7 +305,7 @@ pub const public = struct {
             };
         }
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .plain) {
+        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box {
             return switch (self.*) {
                 inline else => |value| value.encode(allocator),
             };
@@ -464,6 +493,8 @@ pub const signature = struct {
         signature: Signature,
 
         const Self = @This();
+
+        pub const BoxRef = mem.BoxRef(Self, .sec);
         pub const Pem = gen.Pem("BEGIN SSH SIGNATURE", "END SSH SIGNATURE");
         pub const Preamble = gen.Preamble(enum { SSHSIG });
         pub const HashAlgorithm = gen.Magic(enum { sha256, sha512 });
@@ -480,7 +511,10 @@ pub const signature = struct {
             return try Self.from(src);
         }
 
-        pub fn from_pem(allocator: std.mem.Allocator, encoded_pem: *const Pem) !BoxRef(Self, .sec) {
+        pub fn from_pem(
+            allocator: std.mem.Allocator,
+            encoded_pem: *const Pem,
+        ) !BoxRef {
             var der = try encoded_pem.decode(allocator);
             errdefer der.deinit();
 
@@ -511,7 +545,7 @@ pub const signature = struct {
             self: *const Self,
             allocator: std.mem.Allocator,
             hmsg: []const u8,
-        ) !BoxRef(Blob, .sec) {
+        ) !mem.BoxRef(Blob, .sec) {
             const len = self.preamble.encoded_size() +
                 enc.rfc4251.encoded_size(self.namespace) +
                 enc.rfc4251.encoded_size(self.reserved) +

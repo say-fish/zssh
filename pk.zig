@@ -20,9 +20,12 @@ pub const Error = error{
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
 
+const I = std.mem.TokenIterator(u8, .any);
+
 pub fn Magic(comptime T: type) type {
     return enc.GenericMagicString(
         T,
+        I,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     );
@@ -36,22 +39,25 @@ pub fn Pem(comptime M: type) type {
 
         const Self = @This();
         const Magic = M;
-        const TokenIterator = std.mem.TokenIterator(u8, .any);
+        pub const TokenIterator = I;
 
-        pub fn tokenize(src: []const u8) TokenIterator {
+        pub inline fn tokenize(src: []const u8) TokenIterator {
             return std.mem.tokenizeAny(u8, src, " ");
         }
 
         pub fn parse(src: []const u8) !Self {
-            return try pem.parse(Self, src);
+            return try pem.parse(Self, undefined, src);
         }
 
         pub fn decode(
             self: *const Self,
             allocator: std.mem.Allocator,
         ) !Box([]u8, .plain) {
-            const data =
-                try pem.decode(allocator, std.base64.standard.Decoder, self.der);
+            const data = try pem.decode(
+                allocator,
+                std.base64.standard.Decoder,
+                self.der,
+            );
 
             return .{ .allocator = allocator, .data = data };
         }
