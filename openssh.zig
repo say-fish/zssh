@@ -10,8 +10,15 @@ pub const cert = struct {
     pub const Pem = gen.Pem;
 
     // TODO: Move to another namespace
-    fn OpenSSHCert(comptime M: type, comptime T: type) type {
-        return gen.GenericCert(M, T, undefined, public.Key, signature.Signature);
+    fn OpenSSHCert(comptime MagicString: type, comptime PublicKey: type) type {
+        return gen.GenericCert(
+            MagicString,
+            undefined,
+            PublicKey,
+            undefined,
+            public.Key,
+            signature.Signature,
+        );
     }
 
     pub const Rsa = OpenSSHCert(gen.MagicString(enum {
@@ -33,12 +40,12 @@ pub const cert = struct {
         pub fn encode(
             self: *const Self,
             allocator: std.mem.Allocator,
-        ) enc.Error!Box {
+        ) anyerror!Box {
             return enc.encode_value(Self, allocator, self, .plain);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
     });
 
@@ -61,12 +68,12 @@ pub const cert = struct {
         pub fn encode(
             self: *const Self,
             allocator: std.mem.Allocator,
-        ) enc.Error!Box {
+        ) anyerror!Box {
             return enc.encode_value(Self, allocator, self, .plain);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
     });
 
@@ -86,12 +93,12 @@ pub const cert = struct {
         pub fn encode(
             self: *const Self,
             allocator: std.mem.Allocator,
-        ) enc.Error!Box {
+        ) anyerror!Box {
             return enc.encode_value(Self, allocator, self, .plain);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
     });
 
@@ -178,10 +185,13 @@ pub const public = struct {
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
     };
@@ -213,10 +223,13 @@ pub const public = struct {
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
     };
@@ -243,10 +256,13 @@ pub const public = struct {
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
     };

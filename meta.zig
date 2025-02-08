@@ -1,5 +1,5 @@
 //! Type classes *ALIKE* for Zig. This provides facilities for explicit compile
-//! type "interfaces".
+//! time type "interfaces".
 
 const std = @import("std");
 
@@ -11,17 +11,32 @@ pub fn ForAll(pred: fn (comptime type) type, comptime T: type) type {
     return T;
 }
 
-pub fn All(comptime T: type, comptime preds: anytype) type {
-    // const fields_info = @typeInfo(@TypeOf(preds)).@"struct".fields;
+pub fn And(comptime T: type, comptime preds: anytype) type {
+    const pred_type = fn (comptime type) type;
 
     for (std.meta.fields(@TypeOf(preds))) |field| {
-        _ = @as(
+        if (field.type != pred_type) {
+            @compileError(@typeName(field.type) ++
+                " does not match predicate " ++
+                @typeName(pred_type));
+        }
+
+        const func = @as(
             *field.type,
             @alignCast(@constCast(@ptrCast(field.default_value_ptr.?))),
-        )(T);
+        );
+
+        _ = func(T);
     }
 
     return T;
+}
+
+pub fn Container(comptime T: type) type {
+    return switch (@typeInfo(T)) {
+        .@"struct", .@"enum", .@"union" => T,
+        else => @compileError(@typeName(T) ++ "is not a Container."),
+    };
 }
 
 pub fn Struct(comptime T: type) type {

@@ -27,7 +27,7 @@ pub const Error = error{
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
 
-const All = meta.All;
+const And = meta.And;
 
 const I = std.mem.TokenIterator(u8, .any);
 
@@ -157,7 +157,7 @@ pub const Critical = struct {
         return enc.encoded_size(self.ref);
     }
 
-    pub const Iterator = enc.GenericIterator(Option);
+    pub const Iterator = enc.GenericIterator(Option, undefined);
     pub fn iter(self: *const Self) Self.Iterator {
         return .{ .ref = self.ref };
     }
@@ -185,7 +185,7 @@ pub const Extensions = struct {
 
     const Self = @This();
 
-    pub const Iterator = enc.GenericIterator(Kind);
+    pub const Iterator = enc.GenericIterator(Kind, undefined);
     pub const Kind = enum(u8) {
         /// Flag indicating that signatures made with this certificate need not
         /// assert FIDO user presence. This option only makes sense for the
@@ -295,7 +295,7 @@ const Principals = struct {
         }
     };
 
-    pub const Iterator = enc.GenericIterator(Principal);
+    pub const Iterator = enc.GenericIterator(Principal, undefined);
 
     pub fn iter(self: *const Self) Iterator {
         return .{ .ref = self.ref };
@@ -315,8 +315,9 @@ const Principals = struct {
 /// Generic type for a SSH certificate.
 pub fn GenericCert(
     comptime M: type, // Magic preamble
-    comptime T: type,
-    _: All(T, .{ enc.Dec, enc.Enc }), // Type of the public_key
+    _: And(M, .{ enc.Dec, enc.Enc }),
+    comptime T: type, // Type of the public_key
+    _: And(T, .{ enc.Dec, enc.Enc }),
     comptime P: type, // Type of signature_key
     comptime S: type, // Type of signature
 ) type {

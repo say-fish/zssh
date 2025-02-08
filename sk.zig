@@ -157,7 +157,7 @@ pub const Cipher = struct {
         return enc.Error.InvalidData;
     }
 
-    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) anyerror!void {
         try enc.serialize_any([]const u8, writer, self.name);
     }
 
@@ -209,7 +209,7 @@ pub const Kdf = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size_struct(self);
+        return enc.encoded_size_struct(Self, self);
     }
 };
 
@@ -242,7 +242,10 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
                     return .{ next, .{ .opt = t } };
                 }
 
-                pub fn serialize(self: *const @This(), writer: anytype) !void {
+                pub fn serialize(
+                    self: *const @This(),
+                    writer: std.io.AnyWriter,
+                ) anyerror!void {
                     if (self.opt) |*opt| {
                         const len = opt.encoded_size();
 
@@ -363,12 +366,15 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
             return try enc.encode_value(Self, allocator, self, .sec);
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
     };
 }
@@ -387,16 +393,22 @@ pub const wire = struct {
 
         const Self = @This();
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) !Box([]u8, .sec) {
             return try enc.encode_value(Self, allocator, self, .sec);
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size(self);
+            return enc.encoded_size_struct(Self, self);
         }
     };
 
@@ -410,16 +422,22 @@ pub const wire = struct {
 
         const Self = @This();
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) !Box([]u8, .sec) {
             return try enc.encode_value(Self, allocator, self, .sec);
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size(self);
+            return enc.encoded_size_struct(Self, self);
         }
     };
 
@@ -432,16 +450,22 @@ pub const wire = struct {
 
         const Self = @This();
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) !Box([]u8, .sec) {
             return try enc.encode_value(Self, allocator, self, .sec);
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(self);
+            return enc.encoded_size_struct(Self, self);
         }
     };
 };

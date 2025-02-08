@@ -23,24 +23,56 @@ pub const Error = error{
     InvalidChecksum,
 } || mem.Error;
 
-const Box = mem.Box;
 const Mode = mem.Mode;
+
+const Struct = meta.Struct;
+const Container = meta.Container;
 
 pub fn Dec(comptime T: type) type {
     return meta.has_decl(T, "parse", fn ([]const u8) Error!Cont(T));
 }
 
 pub fn Enc(comptime T: type) type {
-    const encode_type =
-        fn (*const T, std.mem.Allocator) Error!meta.member(T, "Box");
+    switch (T) {
+        u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
 
-    const encoded_size_type = fn (*const T) u32;
-    _ = meta.has_decl(T, "encode", encode_type);
-    return meta.has_decl(T, "encoded_size", encoded_size_type);
+        else => switch (@typeInfo(T)) {
+            .@"struct", .@"enum", .@"union" => {
+                const encode_type = fn (
+                    *const T,
+                    std.mem.Allocator,
+                ) anyerror!meta.member(T, "Box");
+
+                const encoded_size_type = fn (*const T) u32;
+
+                _ = meta.has_decl(T, "encode", encode_type);
+                return meta.has_decl(T, "encoded_size", encoded_size_type);
+            },
+            .array => return T,
+            else => @compileError(@typeName(T) ++ " does not satisfy Enc"),
+        },
+    }
 }
 
 pub fn From(comptime T: type) type {
     return T;
+}
+
+pub fn Ser(comptime T: type) type {
+    switch (T) {
+        u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
+
+        else => switch (@typeInfo(T)) {
+            .@"struct", .@"enum", .@"union" => {
+                const serialize_type =
+                    fn (*const T, std.io.AnyWriter) anyerror!void;
+
+                return meta.has_decl(T, "serialize", serialize_type);
+            },
+            .array => return T,
+            else => @compileError(@typeName(T) ++ " does not satisfy Ser"),
+        },
+    }
 }
 
 pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
@@ -77,8 +109,10 @@ pub fn GenericMagicString(
         value: T,
 
         const Self = @This();
-        pub const Value = T;
+
+        pub const Box = mem.Box([]u8, .plain);
         pub const Iterator = I;
+        pub const Value = T;
 
         const STRINGS = enum_to_str(T);
 
@@ -125,17 +159,35 @@ pub fn GenericMagicString(
             return magic;
         }
 
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) anyerror!Box {
+            return encode_value(Self, allocator, self, .plain);
+        }
+
         pub fn encoded_size(self: *const Self) u32 {
             return @intCast(x(self.as_string()));
         }
 
-        pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
             const F = @FieldType(
                 @typeInfo(@typeInfo(@TypeOf(f)).@"fn".return_type.?).error_union.payload,
                 "1",
             );
+            // FIXME:
+            const value: F = switch (F) {
+                [:0]u8,
+                [:0]const u8,
+                => std.mem.span(@as([*c]const u8, self.as_string().ptr)),
+                [6]u8 => self.as_string()[0..6].*,
+                else => self.as_string(),
+            };
 
-            try serialize_any(F, writer, self.as_string());
+            try serialize_any(F, writer, value);
         }
     };
 }
@@ -236,8 +288,8 @@ pub const Padding = struct {
 pub fn serialize_any(
     comptime T: type,
     writer: std.io.AnyWriter,
-    value: anytype,
-) !void {
+    value: Ser(T),
+) anyerror!void {
     switch (comptime T) {
         u32, u64 => _ = try writer.writeInt(T, value, .big),
 
@@ -255,7 +307,7 @@ pub fn serialize_any(
             .@"struct", .@"enum" => try value.serialize(writer),
 
             // This is a special case for fixed size encoded strings
-            .array => _ = try writer.writeAll(value),
+            .array => _ = try writer.writeAll(&value),
 
             else => @compileError(
                 "Cannot encode value of type: " ++ @typeName(T),
@@ -264,7 +316,12 @@ pub fn serialize_any(
     }
 }
 
-pub fn encode_value(comptime T: type, allocator: std.mem.Allocator, value: *const T, comptime mode: Mode) !Box([]u8, mode) {
+pub fn encode_value(
+    comptime T: type,
+    allocator: std.mem.Allocator,
+    value: *const Ser(T),
+    comptime mode: Mode,
+) anyerror!mem.Box([]u8, mode) {
     // TODO: Assert T is a struct or union or enum or call serialize on the type
     var writer = try mem.ArrayWriter.init(allocator, value.encoded_size());
     errdefer writer.deinit();
@@ -299,11 +356,11 @@ pub fn encoded_size(value: anytype) u32 {
     };
 }
 
-pub fn encoded_size_struct(self: anytype) u32 {
+pub fn encoded_size_struct(comptime T: type, value: *const Struct(T)) u32 {
     var ret: u32 = 0;
 
-    inline for (comptime std.meta.fields(@TypeOf(self.*))) |field| {
-        ret += encoded_size(@field(self.*, field.name));
+    inline for (comptime std.meta.fields(@TypeOf(value.*))) |field| {
+        ret += encoded_size(@field(value.*, field.name));
     }
 
     return ret;
@@ -312,12 +369,8 @@ pub fn encoded_size_struct(self: anytype) u32 {
 pub fn serialize_struct(
     comptime T: type,
     writer: std.io.AnyWriter,
-    value: *const T,
+    value: *const Struct(T),
 ) !void {
-    if (@typeInfo(T) != .@"struct") {
-        @compileError("Expected `struct`, got:" ++ @typeName(T));
-    }
-
     inline for (comptime std.meta.fields(T)) |f| {
         try serialize_any(f.type, writer, @field(value, f.name));
     }
@@ -361,7 +414,7 @@ pub inline fn parse_with_cont(comptime T: type, src: []const u8) Error!Cont(T) {
     return .{ i, ret };
 }
 
-pub fn GenericIterator(comptime T: type) type {
+pub fn GenericIterator(comptime T: type, _: Dec(Container(T))) type {
     // TODO: Assert T has parse
     return struct {
         ref: []const u8,
@@ -467,7 +520,7 @@ test "encode [6]u8 (fixed size string)" {
 
     const string = [6]u8{ 'S', 'S', 'H', 'S', 'I', 'G' };
 
-    try serialize_any([6]u8, list.writer().any(), &string);
+    try serialize_any([6]u8, list.writer().any(), string);
 
     try expect_equal_strings(&string, list.items);
 }
