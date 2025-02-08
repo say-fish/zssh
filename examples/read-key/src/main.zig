@@ -1,0 +1,33 @@
+const std = @import("std");
+
+const openssh = @import("zssh").openssh;
+
+pub fn main() !void {
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    defer if (gpa.deinit() == .leak) @panic("MEMORY LEAK");
+
+    var args = try std.process.ArgIterator.initWithAllocator(gpa.allocator());
+    defer args.deinit();
+
+    _ = args.next();
+
+    const file_name = args.next() orelse @panic("no argument");
+
+    var file = try std.fs.cwd().openFile("key.pub", .{});
+    defer file.close();
+
+    const contents = try file.readToEndAlloc(gpa.allocator(), 1024 * 1024);
+    defer gpa.allocator().free(contents);
+
+    if (std.mem.endsWith(u8, file_name, ".pub")) {
+        const pem = try openssh.public.Key.Pem.parse(contents);
+
+        const key = try openssh.public.Key.from_pem(gpa.allocator(), pem);
+        defer key.deinit();
+
+        // TODO: formatting
+        std.debug.print("{any}\n", .{key.data});
+    } else {
+        @panic("TODO:");
+    }
+}
