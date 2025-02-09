@@ -194,6 +194,17 @@ pub const public = struct {
         ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
+
+        pub fn format(
+            self: *const Self,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            try writer.print(" magic: {s}\n", .{self.magic.as_string()});
+            try writer.print("     e: {}\n", .{std.fmt.fmtSliceHexUpper(self.e)});
+            try writer.print("     n: {}", .{std.fmt.fmtSliceHexUpper(self.n)});
+        }
     };
 
     pub const Ecdsa = struct {
@@ -232,6 +243,17 @@ pub const public = struct {
         ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
         }
+
+        pub fn format(
+            self: *const Self,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            try writer.print(" magic: {s}\n", .{self.magic.as_string()});
+            try writer.print(" curve: {}", .{std.fmt.fmtSliceHexUpper(self.curve)});
+            try writer.print("    pk: {}", .{std.fmt.fmtSliceHexUpper(self.pk)});
+        }
     };
 
     pub const Ed25519 = struct {
@@ -264,6 +286,16 @@ pub const public = struct {
             writer: std.io.AnyWriter,
         ) anyerror!void {
             try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn format(
+            self: *const Self,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            try writer.print(" magic: {s}\n", .{self.magic.as_string()});
+            try writer.print("    pk: {}", .{std.fmt.fmtSliceHexUpper(self.pk)});
         }
     };
 
@@ -331,6 +363,17 @@ pub const public = struct {
             return switch (self.*) {
                 inline else => |value| enc.encoded_size(value),
             };
+        }
+
+        pub fn format(
+            self: *const Self,
+            comptime fmt: []const u8,
+            options: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            switch (self.*) {
+                inline else => |k| try k.format(fmt, options, writer),
+            }
         }
     };
 };
