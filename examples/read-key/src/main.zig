@@ -6,6 +6,8 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer if (gpa.deinit() == .leak) @panic("MEMORY LEAK");
 
+    const stdout = std.io.getStdOut().writer();
+
     var args = try std.process.ArgIterator.initWithAllocator(gpa.allocator());
     defer args.deinit();
 
@@ -13,7 +15,7 @@ pub fn main() !void {
 
     const file_name = args.next() orelse @panic("no argument");
 
-    var file = try std.fs.cwd().openFile("key.pub", .{});
+    var file = try std.fs.cwd().openFile(file_name, .{});
     defer file.close();
 
     const contents = try file.readToEndAlloc(gpa.allocator(), 1024 * 1024);
@@ -24,9 +26,8 @@ pub fn main() !void {
 
         const key = try openssh.public.Key.from_pem(gpa.allocator(), pem);
         defer key.deinit();
-
-        // TODO: formatting
-        std.debug.print("{any}\n", .{key.data});
+        try stdout.print("{s}\n", .{file_name});
+        try stdout.print("{}\n", .{key.data});
     } else {
         @panic("TODO:");
     }
