@@ -3,11 +3,8 @@ const std = @import("std");
 
 const zssh = @import("zssh");
 
-const Ecdsa = zssh.sk.Ecdsa;
-const Ed25519 = zssh.sk.Ed25519;
+const Key = zssh.openssh.private.Key;
 const Pem = zssh.sk.Pem;
-const Rsa = zssh.sk.Rsa;
-const Sk = zssh.sk.Sk;
 
 const expect_equal = std.testing.expectEqual;
 const expect_equal_slices = std.testing.expectEqualSlices;
@@ -18,23 +15,24 @@ test "parse Rsa private key: get_public_key" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Rsa.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
     _ = try key.get_public_key();
 }
+
 test "Rsa private key: get_private_key" {
     const pem = try Pem.parse(@embedFile("rsa-key"));
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Rsa.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
-    var skey = try key.get_private_key(std.testing.allocator, null);
-    defer skey.deinit();
+    const sk = try key.get_private_key(std.testing.allocator, null);
+    defer sk.deinit();
 
-    try expect_equal_slices(u8, skey.data.kind, "ssh-rsa");
+    try expect_equal_slices(u8, sk.data.rsa.kind, "ssh-rsa");
     // FIXME: Fix typo
-    try expect_equal_slices(u8, skey.data.comment, "root@locahost");
+    try expect_equal_slices(u8, sk.data.rsa.comment, "root@locahost");
     // TODO: Check other fields
 }
 
@@ -43,15 +41,15 @@ test "Rsa private key with passphrase" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Rsa.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
-    var skey = try key.get_private_key(std.testing.allocator, "123");
-    defer skey.deinit();
+    const sk = try key.get_private_key(std.testing.allocator, "123");
+    defer sk.deinit();
 
-    try std.testing.expect(skey.data._pad.verify());
+    try std.testing.expect(sk.data.rsa._pad.verify());
 
-    try std.testing.expectEqualSlices(u8, skey.data.kind, "ssh-rsa");
-    try std.testing.expectEqualSlices(u8, skey.data.comment, "root@locahost"); // FIXME: Fix typo
+    try std.testing.expectEqualSlices(u8, sk.data.rsa.kind, "ssh-rsa");
+    try std.testing.expectEqualSlices(u8, sk.data.rsa.comment, "root@locahost"); // FIXME: Fix typo
     // TODO: Check other fields
 }
 
@@ -60,7 +58,7 @@ test "Rsa private key with wrong passphrase" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Rsa.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
     try expect_error(
         error.InvalidChecksum,
@@ -73,14 +71,14 @@ test "Ed25519 private key: get_private_key" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Ed25519.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
-    var skey = try key.get_private_key(std.testing.allocator, null);
-    defer skey.deinit();
+    const sk = try key.get_private_key(std.testing.allocator, null);
+    defer sk.deinit();
 
-    try expect_equal_slices(u8, skey.data.kind, "ssh-ed25519");
+    try expect_equal_slices(u8, sk.data.ed.kind, "ssh-ed25519");
     // FIXME: Fix typo
-    try expect_equal_slices(u8, skey.data.comment, "root@locahost");
+    try expect_equal_slices(u8, sk.data.ed.comment, "root@locahost");
     // TODO: check other fields
 }
 
@@ -89,7 +87,7 @@ test "Ed25519 private key with passphrase: get_public_key" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Ed25519.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
     _ = try key.get_public_key();
 }
@@ -99,13 +97,13 @@ test "Ed25519 private key with passphrase: get_private_key" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Ed25519.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
-    var skey = try key.get_private_key(std.testing.allocator, "123");
-    defer skey.deinit();
+    const sk = try key.get_private_key(std.testing.allocator, "123");
+    defer sk.deinit();
 
-    try expect_equal_slices(u8, skey.data.kind, "ssh-ed25519");
-    try expect_equal_slices(u8, skey.data.comment, "root@localhost");
+    try expect_equal_slices(u8, sk.data.ed.kind, "ssh-ed25519");
+    try expect_equal_slices(u8, sk.data.ed.comment, "root@localhost");
 }
 
 test "ed25519 private key with long comment" {
@@ -113,15 +111,15 @@ test "ed25519 private key with long comment" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Ed25519.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
-    var skey = try key.get_private_key(std.testing.allocator, null);
-    defer skey.deinit();
+    const sk = try key.get_private_key(std.testing.allocator, null);
+    defer sk.deinit();
 
     const expected =
         "This is a long comment with spaces in between, OpenSSH really does allow anything here...";
 
-    try std.testing.expectEqualSlices(u8, expected, skey.data.comment);
+    try std.testing.expectEqualSlices(u8, expected, sk.data.ed.comment);
 }
 
 test "Ecdsa private key" {
@@ -129,14 +127,16 @@ test "Ecdsa private key" {
     var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Ecdsa.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
-    var skey = try key.get_private_key(std.testing.allocator, null);
-    defer skey.deinit();
+    const sk = try key.get_private_key(std.testing.allocator, null);
+    defer sk.deinit();
 
-    try std.testing.expectEqualSlices(u8, skey.data.kind, "ecdsa-sha2-nistp256");
+    try std.testing
+        .expectEqualSlices(u8, sk.data.ecdsa.kind, "ecdsa-sha2-nistp256");
     // FIXME: Typo
-    try std.testing.expectEqualSlices(u8, skey.data.comment, "root@locahost");
+    try std.testing
+        .expectEqualSlices(u8, sk.data.ecdsa.comment, "root@locahost");
     // TODO: check other fields
 }
 
@@ -145,13 +145,13 @@ test "Ecdsa private key with passphrase" {
     const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
-    const key = try Ecdsa.from_bytes(der.data);
+    const key = try Key.from_bytes(der.data);
 
     const sk = try key.get_private_key(std.testing.allocator, "123");
     defer sk.deinit();
 
-    try expect_equal_slices(u8, sk.data.kind, "ecdsa-sha2-nistp256");
-    try expect_equal_slices(u8, sk.data.comment, "root@localhost");
+    try expect_equal_slices(u8, sk.data.ecdsa.kind, "ecdsa-sha2-nistp256");
+    try expect_equal_slices(u8, sk.data.ecdsa.comment, "root@localhost");
     // TODO: check other fields
 }
 
@@ -163,7 +163,7 @@ test "Ecdsa private key with passphrase" {
 
 test "encode Ed25519 private key (with passphrase)" {
     const pem = try Pem.parse(@embedFile("ed25519-key-123"));
-    const key = try Ed25519.from_pem(std.testing.allocator, pem);
+    const key = try Key.from_pem(std.testing.allocator, pem);
     defer key.deinit();
 
     try expect_equal(290, key.data.encoded_size());
@@ -178,7 +178,7 @@ test "encode Ed25519 private key (with passphrase)" {
 
 test "encode Ed25519 private key" {
     const pem = try Pem.parse(@embedFile("ed25519-key"));
-    const key = try Ed25519.from_pem(std.testing.allocator, pem);
+    const key = try Key.from_pem(std.testing.allocator, pem);
     defer key.deinit();
 
     const encoded = try key.data.encode(std.testing.allocator);
@@ -190,13 +190,13 @@ test "encode Ed25519 private key" {
 
 test "wire encode Ed25519 private key" {
     const pem = try Pem.parse(@embedFile("ed25519-key"));
-    const key = try Ed25519.from_pem(std.testing.allocator, pem);
+    const key = try Key.from_pem(std.testing.allocator, pem);
     defer key.deinit();
 
     const sk = try key.data.get_private_key(std.testing.allocator, null);
     defer sk.deinit();
-
-    const encoded = try Ed25519.get_sk_wire(&sk.data).encode(
+    // FIXME:
+    const encoded = try sk.data.get_wire().ed.encode(
         std.testing.allocator,
     );
     defer encoded.deinit();

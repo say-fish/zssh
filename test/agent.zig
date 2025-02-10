@@ -67,7 +67,7 @@ test "decode AddIdentity" {
         std.meta.activeTag(msg),
     );
     try expect_equal(
-        zssh.agent.Sk.ed,
+        zssh.openssh.private.wire.Key.ed,
         std.meta.activeTag(msg.add_identity.key),
     );
 

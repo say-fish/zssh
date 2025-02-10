@@ -224,7 +224,7 @@ pub const Client = union(enum(u8)) {
     };
 
     pub const AddIdentity = struct {
-        key: Sk, // TODO:
+        key: openssh.private.wire.Key, // TODO:
         comment: []const u8,
 
         const Self = @This();
@@ -300,7 +300,7 @@ pub const Client = union(enum(u8)) {
     };
 
     pub const AddIdConstrained = struct {
-        key: Sk,
+        key: openssh.private.wire.Key,
         comment: []const u8,
         constraints: Constraints,
 
@@ -426,47 +426,47 @@ pub const openssh_extensions = struct {
     };
 };
 
-pub const Sk = union(enum) {
-    rsa: sk.wire.Rsa,
-    ecdsa: sk.wire.Ecdsa,
-    ed: sk.wire.Ed25519,
-
-    const Self = @This();
-
-    const Magic = openssh.public.Key.Magic;
-
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
-        const magic = Magic.from_bytes(src) catch return error.InvalidData;
-
-        switch (magic.value) {
-            .@"ssh-rsa",
-            => {
-                const next, const key =
-                    try enc.parse_with_cont(sk.wire.Rsa, src);
-
-                return .{ next, .{ .rsa = key } };
-            },
-
-            .@"ecdsa-sha2-nistp256",
-            .@"ecdsa-sha2-nistp384",
-            .@"ecdsa-sha2-nistp521",
-            => {
-                const next, const key =
-                    try enc.parse_with_cont(sk.wire.Ecdsa, src);
-
-                return .{ next, .{ .ecdsa = key } };
-            },
-
-            .@"ssh-ed25519",
-            => {
-                const next, const key =
-                    try enc.parse_with_cont(sk.wire.Ed25519, src);
-
-                return .{ next, .{ .ed = key } };
-            },
-        }
-    }
-};
+// pub const Sk = union(enum) {
+//     rsa: sk.wire.Rsa,
+//     ecdsa: sk.wire.Ecdsa,
+//     ed: sk.wire.Ed25519,
+//
+//     const Self = @This();
+//
+//     const Magic = openssh.public.Key.Magic;
+//
+//     pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+//         const magic = Magic.from_bytes(src) catch return error.InvalidData;
+//
+//         switch (magic.value) {
+//             .@"ssh-rsa",
+//             => {
+//                 const next, const key =
+//                     try enc.parse_with_cont(sk.wire.Rsa, src);
+//
+//                 return .{ next, .{ .rsa = key } };
+//             },
+//
+//             .@"ecdsa-sha2-nistp256",
+//             .@"ecdsa-sha2-nistp384",
+//             .@"ecdsa-sha2-nistp521",
+//             => {
+//                 const next, const key =
+//                     try enc.parse_with_cont(sk.wire.Ecdsa, src);
+//
+//                 return .{ next, .{ .ecdsa = key } };
+//             },
+//
+//             .@"ssh-ed25519",
+//             => {
+//                 const next, const key =
+//                     try enc.parse_with_cont(sk.wire.Ed25519, src);
+//
+//                 return .{ next, .{ .ed = key } };
+//             },
+//         }
+//     }
+// };
 
 pub fn decode_as_string(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
     const Tag = comptime std.meta.Tag(T);

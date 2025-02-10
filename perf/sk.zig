@@ -4,7 +4,7 @@ const std = @import("std");
 const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
-const Ed25519 = zssh.sk.Ed25519;
+const Key = zssh.openssh.private.Key;
 const Pem = zssh.sk.Pem;
 
 const MAX_RUNS: usize = 0x01 << 26;
@@ -25,7 +25,7 @@ pub fn main() !void {
     var timer = try std.time.Timer.start();
 
     for (0..MAX_RUNS) |_| {
-        const key = try Ed25519.from_bytes(der.data);
+        const key = try Key.from_bytes(der.data);
 
         const sk = try key.get_private_key(fixed_allocator.allocator(), null);
         defer sk.deinit();

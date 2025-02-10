@@ -3,7 +3,7 @@ const std = @import("std");
 
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
-const openssh = @import("openssh.zig");
+const meta = @import("meta.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 
@@ -19,6 +19,8 @@ pub const Error = error{
 
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
+
+const Struct = meta.Struct;
 
 const I = std.mem.TokenIterator(u8, .sequence);
 
@@ -213,7 +215,7 @@ pub const Kdf = struct {
     }
 };
 
-pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
+pub fn Sk(comptime Pk: type, comptime Kb: type) type {
     return struct {
         magic: Magic,
         cipher: Cipher,
@@ -225,8 +227,7 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
 
         const Self = @This();
 
-        const S = MakeSk(Pri);
-
+        // FIXME:
         fn Optional(comptime T: type) type {
             return struct {
                 opt: ?T,
@@ -269,26 +270,6 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
             };
         }
 
-        fn MakeSk(comptime T: type) type {
-            // if (std.meta.declarations(T).len != 0)
-            //     @compileError("Cannot flatten structs with declarations (see: #6709)");
-
-            const B = struct { checksum: Checksum };
-
-            const A = struct { comment: []const u8, _pad: enc.Padding };
-
-            const fields = std.meta.fields(B) ++ std.meta.fields(T) ++ std.meta.fields(A);
-
-            const ret: std.builtin.Type.Struct = .{
-                .decls = &.{},
-                .fields = fields,
-                .is_tuple = false,
-                .layout = .auto,
-            };
-
-            return @Type(@unionInit(std.builtin.Type, "struct", ret));
-        }
-
         pub const Magic = MagicString(enum { @"openssh-key-v1" });
 
         /// Returns `true` if the `private_key_blob` is encrypted, i.e.,
@@ -308,7 +289,7 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
             self: *const Self,
             allocator: std.mem.Allocator,
             passphrase: ?[]const u8,
-        ) !BoxRef(S, .sec) {
+        ) !BoxRef(Kb, .sec) {
             if (self.is_encrypted() and passphrase == null)
                 return error.MissingPassphrase;
 
@@ -322,7 +303,7 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
                     );
                     errdefer allocator.free(private_blob);
 
-                    const key = try enc.parse(S, private_blob);
+                    const key = try Kb.from_bytes(private_blob);
 
                     return .{
                         .allocator = allocator,
@@ -333,14 +314,6 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
             }
 
             unreachable;
-        }
-
-        pub fn get_sk_wire(sk: *const S) Pri {
-            var ret = std.mem.zeroes(Pri);
-
-            mem.shallow_copy(Pri, &ret, S, sk);
-
-            return ret;
         }
 
         fn from(src: []const u8) Error!Self {
@@ -379,97 +352,22 @@ pub fn GenericSk(comptime Pk: type, comptime Pri: type) type {
     };
 }
 
-pub const wire = struct {
-    pub const Rsa = struct {
-        kind: []const u8,
-        // Public key parts
-        n: []const u8,
-        e: []const u8,
-        // Private key parts
-        d: []const u8,
-        i: []const u8,
-        p: []const u8,
-        q: []const u8,
+pub fn KeyBlob(comptime T: type, _: Struct(T)) type {
+    // if (std.meta.declarations(T).len != 0)
+    //     @compileError("Cannot flatten structs with declarations (see: #6709)");
 
-        const Self = @This();
+    const B = struct { checksum: Checksum };
 
-        pub fn encode(
-            self: *const Self,
-            allocator: std.mem.Allocator,
-        ) !Box([]u8, .sec) {
-            return try enc.encode_value(Self, allocator, self, .sec);
-        }
+    const A = struct { comment: []const u8, _pad: enc.Padding };
 
-        pub fn serialize(
-            self: *const Self,
-            writer: std.io.AnyWriter,
-        ) anyerror!void {
-            try enc.serialize_struct(Self, writer, self);
-        }
+    const fields = std.meta.fields(B) ++ std.meta.fields(T) ++ std.meta.fields(A);
 
-        pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(Self, self);
-        }
+    const ret: std.builtin.Type.Struct = .{
+        .decls = &.{},
+        .fields = fields,
+        .is_tuple = false,
+        .layout = .auto,
     };
 
-    pub const Ecdsa = struct {
-        kind: []const u8,
-        // Public parts
-        curve: []const u8,
-        pk: []const u8,
-        // Private parts
-        sk: []const u8,
-
-        const Self = @This();
-
-        pub fn encode(
-            self: *const Self,
-            allocator: std.mem.Allocator,
-        ) !Box([]u8, .sec) {
-            return try enc.encode_value(Self, allocator, self, .sec);
-        }
-
-        pub fn serialize(
-            self: *const Self,
-            writer: std.io.AnyWriter,
-        ) anyerror!void {
-            try enc.serialize_struct(Self, writer, self);
-        }
-
-        pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(Self, self);
-        }
-    };
-
-    pub const Ed25519 = struct {
-        kind: []const u8,
-        // Public parts
-        pk: []const u8,
-        // Private parts
-        sk: []const u8,
-
-        const Self = @This();
-
-        pub fn encode(
-            self: *const Self,
-            allocator: std.mem.Allocator,
-        ) !Box([]u8, .sec) {
-            return try enc.encode_value(Self, allocator, self, .sec);
-        }
-
-        pub fn serialize(
-            self: *const Self,
-            writer: std.io.AnyWriter,
-        ) anyerror!void {
-            try enc.serialize_struct(Self, writer, self);
-        }
-
-        pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(Self, self);
-        }
-    };
-};
-
-pub const Rsa = GenericSk(openssh.public.Key, wire.Rsa);
-pub const Ecdsa = GenericSk(openssh.public.Key, wire.Ecdsa);
-pub const Ed25519 = GenericSk(openssh.public.Key, wire.Ed25519);
+    return @Type(@unionInit(std.builtin.Type, "struct", ret));
+}
