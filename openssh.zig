@@ -860,5 +860,7 @@ pub const private = struct {
         }
     };
 
+    pub const Pem = gen.Pem;
+
     pub const Key = gen.Sk(public.Key, KeyBlob);
 };

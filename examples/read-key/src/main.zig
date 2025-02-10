@@ -29,6 +29,12 @@ pub fn main() !void {
         try stdout.print("{s}\n", .{file_name});
         try stdout.print("{}\n", .{key.data});
     } else {
-        @panic("TODO:");
+        const pem = try openssh.private.Pem.parse(contents);
+
+        const key = try openssh.private.Key.from_pem(gpa.allocator(), pem);
+        defer key.deinit();
+
+        try stdout.print("{s}\n", .{file_name});
+        try stdout.print("private key: {any}\n", .{key.data});
     }
 }
