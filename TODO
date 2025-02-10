@@ -1,3 +1,4 @@
+- Make sure examples compile
 - FIX pk.Pk (Public and private keys should be an enum)
 - Add fingerprints
 - Add examples
