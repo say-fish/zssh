@@ -164,11 +164,12 @@ pub const Cipher = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size(self.name);
+        return enc.encoded_size([]const u8, self.name);
     }
 };
 
-/// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG keys.
+/// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG
+/// keys.
 pub const Pem = struct {
     pre: pem.Literal("BEGIN OPENSSH PRIVATE KEY", TokenIterator),
     der: []const u8,
@@ -182,7 +183,7 @@ pub const Pem = struct {
     }
 
     pub fn parse(src: []const u8) !Self {
-        return try pem.parse(Self, undefined, src);
+        return try pem.parse(Self, src);
     }
 
     pub fn decode(

@@ -58,7 +58,7 @@ pub fn Pem(comptime P: []const u8, comptime S: []const u8) type {
         }
 
         pub fn parse(src: []const u8) !Self {
-            return try pem.parse(Self, undefined, src);
+            return try pem.parse(Self, src);
         }
 
         pub fn decode(

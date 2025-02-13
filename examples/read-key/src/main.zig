@@ -26,8 +26,11 @@ pub fn main() !void {
 
         const key = try openssh.public.Key.from_pem(gpa.allocator(), pem);
         defer key.deinit();
+
         try stdout.print("{s}\n", .{file_name});
         try stdout.print("{}\n", .{key.data});
+
+        try key.data.fingerprint();
     } else {
         const pem = try openssh.private.Pem.parse(contents);
 

@@ -13,9 +13,7 @@ pub const cert = struct {
     fn OpenSSHCert(comptime MagicString: type, comptime PublicKey: type) type {
         return gen.GenericCert(
             MagicString,
-            undefined,
             PublicKey,
-            undefined,
             public.Key,
             signature.Signature,
         );
@@ -205,6 +203,21 @@ pub const public = struct {
             try writer.print("     e: {}\n", .{std.fmt.fmtSliceHexUpper(self.e)});
             try writer.print("     n: {}", .{std.fmt.fmtSliceHexUpper(self.n)});
         }
+
+        // TODO: modes
+        pub fn fingerprint(self: *const Self) !void {
+            var sha = std.crypto.hash.sha2.Sha256.init(.{});
+            const stdout = std.io.getStdOut().writer();
+
+            try self.serialize(sha.writer().any());
+            var out = std.mem.zeroes([std.crypto.hash.sha2.Sha256.digest_length]u8);
+
+            sha.final(&out);
+
+            try stdout.print("{} SHA256:", .{(self.n.len - 1) * 8}); // FIXME: MPINT
+            try std.base64.standard_no_pad.Encoder.encodeWriter(stdout, &out);
+            try stdout.print(" (RSA)", .{});
+        }
     };
 
     pub const Ecdsa = struct {
@@ -361,7 +374,7 @@ pub const public = struct {
 
         pub fn encoded_size(self: *const Self) u32 {
             return switch (self.*) {
-                inline else => |value| enc.encoded_size(value),
+                inline else => |value| enc.encoded_size(@TypeOf(value), value),
             };
         }
 
@@ -373,6 +386,13 @@ pub const public = struct {
         ) !void {
             switch (self.*) {
                 inline else => |k| try k.format(fmt, options, writer),
+            }
+        }
+
+        pub fn fingerprint(self: *const Self) !void {
+            switch (self.*) {
+                .rsa => |k| try k.fingerprint(),
+                else => @panic("die"),
             }
         }
     };

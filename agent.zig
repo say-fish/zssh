@@ -93,7 +93,7 @@ pub const Agent = union(enum(u8)) {
             }
         };
 
-        pub const Iterator = enc.GenericIterator(Pk, undefined);
+        pub const Iterator = enc.GenericIterator(Pk);
 
         pub fn iter(self: *const Self) ?Iterator {
             return if (self.keys) |keys| .{ .ref = keys } else null;
@@ -314,7 +314,7 @@ pub const Client = union(enum(u8)) {
                 return .{ src.len, .{ .ref = src } };
             }
 
-            pub const Iterator = enc.GenericIterator(Constraint, undefined);
+            pub const Iterator = enc.GenericIterator(Constraint);
 
             pub fn iter(self: *const Constraints) Iterator {
                 return .{ .ref = self.ref };

@@ -69,9 +69,8 @@ pub fn Blob(comptime I: type) type {
 // TODO: AutoDecoder
 pub fn parse(
     comptime T: type,
-    _: ForAll(FromIter, Tokenize(Struct(T))),
     src: []const u8,
-) !T {
+) !ForAll(FromIter, Tokenize(Struct(T))) {
     var it = T.tokenize(src);
 
     var ret: T = undefined;

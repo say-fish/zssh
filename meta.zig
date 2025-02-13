@@ -4,8 +4,13 @@
 const std = @import("std");
 
 pub fn ForAll(pred: fn (comptime type) type, comptime T: type) type {
-    for (std.meta.fields(T)) |field| {
-        _ = pred(field.type);
+    switch (@typeInfo(T)) {
+        .@"struct", .@"enum", .@"union" => {
+            for (std.meta.fields(T)) |field| {
+                _ = pred(field.type);
+            }
+        },
+        else => _ = pred(T),
     }
 
     return T;

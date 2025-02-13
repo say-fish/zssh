@@ -25,15 +25,28 @@ pub const Error = error{
 
 const Mode = mem.Mode;
 
-const Struct = meta.Struct;
 const Container = meta.Container;
+const ForAll = meta.ForAll;
+const Struct = meta.Struct;
 
 pub fn Dec(comptime T: type) type {
-    return meta.has_decl(T, "parse", fn ([]const u8) Error!Cont(T));
+    switch (T) {
+        u8, u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
+
+        else => switch (@typeInfo(T)) {
+            .@"struct", .@"enum", .@"union" => {
+                const dec_type = fn ([]const u8) Error!Cont(T);
+
+                return meta.has_decl(T, "parse", dec_type);
+            },
+            else => @compileError(@typeName(T) ++
+                " does not satisfy Dec"),
+        },
+    }
 }
 
 pub fn Enc(comptime T: type) type {
-    switch (T) {
+    switch (EncSize(T)) {
         u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
 
         else => switch (@typeInfo(T)) {
@@ -43,9 +56,22 @@ pub fn Enc(comptime T: type) type {
                     std.mem.Allocator,
                 ) anyerror!meta.member(T, "Box");
 
+                return meta.has_decl(T, "encode", encode_type);
+            },
+            .array => return T,
+            else => @compileError(@typeName(T) ++ " does not satisfy Enc"),
+        },
+    }
+}
+
+pub fn EncSize(comptime T: type) type {
+    switch (T) {
+        u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
+
+        else => switch (@typeInfo(T)) {
+            .@"struct", .@"enum", .@"union" => {
                 const encoded_size_type = fn (*const T) u32;
 
-                _ = meta.has_decl(T, "encode", encode_type);
                 return meta.has_decl(T, "encoded_size", encoded_size_type);
             },
             .array => return T,
@@ -319,10 +345,9 @@ pub fn serialize_any(
 pub fn encode_value(
     comptime T: type,
     allocator: std.mem.Allocator,
-    value: *const Ser(T),
+    value: *const meta.And(T, .{ Ser, EncSize, Container }),
     comptime mode: Mode,
 ) anyerror!mem.Box([]u8, mode) {
-    // TODO: Assert T is a struct or union or enum or call serialize on the type
     var writer = try mem.ArrayWriter.init(allocator, value.encoded_size());
     errdefer writer.deinit();
 
@@ -331,36 +356,30 @@ pub fn encode_value(
     return .{ .allocator = allocator, .data = writer.mem };
 }
 
-pub fn encoded_size(value: anytype) u32 {
+pub fn encoded_size(comptime T: type, value: EncSize(T)) u32 {
     return switch (@TypeOf(value)) {
         u32, u64, []u8, []const u8 => rfc4251.encoded_size(value),
 
         [:0]u8, [:0]const u8 => null_terminated_str_encoded_size(value),
 
         else => |Type| switch (@typeInfo(Type)) {
-            .@"enum",
-            .@"struct",
-            .@"union",
-            => if (@hasDecl(Type, "encoded_size"))
-                value.encoded_size()
-            else
-                @compileError(@typeName(Type) ++
-                    " does not declare `encoded_size`"),
+            .@"enum", .@"struct", .@"union" => value.encoded_size(),
 
             .array => comptime value.len,
 
-            else => @compileError(
-                "Cannot get encoded size of type: " ++ @typeName(Type),
-            ),
+            else => comptime unreachable,
         },
     };
 }
 
-pub fn encoded_size_struct(comptime T: type, value: *const Struct(T)) u32 {
+pub fn encoded_size_struct(
+    comptime T: type,
+    value: *const ForAll(EncSize, Struct(T)),
+) u32 {
     var ret: u32 = 0;
 
-    inline for (comptime std.meta.fields(@TypeOf(value.*))) |field| {
-        ret += encoded_size(@field(value.*, field.name));
+    inline for (comptime std.meta.fields(T)) |field| {
+        ret += encoded_size(field.type, @field(value.*, field.name));
     }
 
     return ret;
@@ -369,14 +388,17 @@ pub fn encoded_size_struct(comptime T: type, value: *const Struct(T)) u32 {
 pub fn serialize_struct(
     comptime T: type,
     writer: std.io.AnyWriter,
-    value: *const Struct(T),
+    value: *const ForAll(Ser, Struct(T)),
 ) !void {
     inline for (comptime std.meta.fields(T)) |f| {
         try serialize_any(f.type, writer, @field(value, f.name));
     }
 }
 
-pub inline fn parse(comptime T: type, src: []const u8) Error!T {
+pub inline fn parse(
+    comptime T: type,
+    src: []const u8,
+) Error!ForAll(Dec, T) {
     const next, const ret = try parse_with_cont(T, src);
 
     std.debug.assert(next == src.len);
@@ -384,38 +406,36 @@ pub inline fn parse(comptime T: type, src: []const u8) Error!T {
     return ret;
 }
 
-pub inline fn parse_with_cont(comptime T: type, src: []const u8) Error!Cont(T) {
+pub inline fn parse_with_cont(
+    comptime T: type,
+    src: []const u8,
+) Error!Cont(ForAll(Dec, T)) {
     var ret: T = undefined;
 
     var i: usize = 0;
 
-    inline for (comptime std.meta.fields(T)) |f| {
+    inline for (comptime std.meta.fields(T)) |field| {
         const ref = src[i..];
 
-        const next, const val = switch (comptime f.type) {
+        const next, const val = switch (comptime field.type) {
             []const u8 => try rfc4251.parse_string(ref),
 
             u8, u32, u64 => |U| try rfc4251.parse_int(U, ref),
 
-            else => if (@hasDecl(f.type, "parse"))
-                try f.type.parse(ref)
-            else
-                @compileError("Type: " ++
-                    @typeName(f.type) ++ " does not declare `fn parse([]const u8) ...`"),
+            else => try field.type.parse(ref),
         };
 
         i += next;
 
         std.debug.assert(i <= src.len);
 
-        @field(ret, f.name) = val;
+        @field(ret, field.name) = val;
     }
 
     return .{ i, ret };
 }
 
-pub fn GenericIterator(comptime T: type, _: Dec(Container(T))) type {
-    // TODO: Assert T has parse
+pub fn GenericIterator(comptime T: type) type {
     return struct {
         ref: []const u8,
         off: usize = 0,
@@ -425,7 +445,8 @@ pub fn GenericIterator(comptime T: type, _: Dec(Container(T))) type {
         pub fn next(self: *Self) !?T {
             if (self.done()) return null;
 
-            const off, const ret = try T.parse(self.ref[self.off..]);
+            const off, const ret = try Dec(Container(T))
+                .parse(self.ref[self.off..]);
             self.off += off;
 
             return ret;

@@ -53,7 +53,7 @@ pub const Pem = struct {
     }
 
     pub fn parse(src: []const u8) !Self {
-        return try pem.parse(Self, undefined, src);
+        return try pem.parse(Self, src);
     }
 
     pub fn decode(
@@ -73,16 +73,16 @@ pub const CertType = enum(u2) {
 
     const Self = @This();
 
+    const Box = mem.Unmanaged(u8);
+
     pub fn parse(src: []const u8) enc.Error!enc.Cont(CertType) {
         const next, const val = try enc.rfc4251.parse_int(u32, src);
 
         return .{ next, @enumFromInt(val) };
     }
 
-    // FIXME: serialyze
-
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size(@as(u32, @intFromEnum(self.*)));
+        return enc.encoded_size(u32, @intFromEnum(self.*));
     }
 };
 
@@ -154,10 +154,10 @@ pub const Critical = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size(self.ref);
+        return enc.encoded_size([]const u8, self.ref);
     }
 
-    pub const Iterator = enc.GenericIterator(Option, undefined);
+    pub const Iterator = enc.GenericIterator(Option);
     pub fn iter(self: *const Self) Self.Iterator {
         return .{ .ref = self.ref };
     }
@@ -185,7 +185,7 @@ pub const Extensions = struct {
 
     const Self = @This();
 
-    pub const Iterator = enc.GenericIterator(Kind, undefined);
+    pub const Iterator = enc.GenericIterator(Kind);
     pub const Kind = enum(u8) {
         /// Flag indicating that signatures made with this certificate need not
         /// assert FIDO user presence. This option only makes sense for the
@@ -251,7 +251,7 @@ pub const Extensions = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size(self.ref);
+        return enc.encoded_size([]const u8, self.ref);
     }
 
     pub fn iter(self: *const Self) Iterator {
@@ -295,7 +295,7 @@ const Principals = struct {
         }
     };
 
-    pub const Iterator = enc.GenericIterator(Principal, undefined);
+    pub const Iterator = enc.GenericIterator(Principal);
 
     pub fn iter(self: *const Self) Iterator {
         return .{ .ref = self.ref };
@@ -308,16 +308,14 @@ const Principals = struct {
     }
 
     pub fn encoded_size(self: *const Self) u32 {
-        return enc.encoded_size(self.ref);
+        return enc.encoded_size([]const u8, self.ref);
     }
 };
 
 /// Generic type for a SSH certificate.
 pub fn GenericCert(
     comptime M: type, // Magic preamble
-    _: And(M, .{ enc.Dec, enc.Enc }),
     comptime T: type, // Type of the public_key
-    _: And(T, .{ enc.Dec, enc.Enc }),
     comptime P: type, // Type of signature_key
     comptime S: type, // Type of signature
 ) type {
@@ -370,7 +368,8 @@ pub fn GenericCert(
 
             inline for (std.meta.fields(Self)) |field| {
                 if (comptime !std.mem.eql(u8, "signature", field.name)) {
-                    ret += enc.encoded_size(@field(self, field.name));
+                    ret +=
+                        enc.encoded_size(field.type, @field(self, field.name));
                 }
             }
 
