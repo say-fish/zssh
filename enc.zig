@@ -45,25 +45,6 @@ pub fn Dec(comptime T: type) type {
     }
 }
 
-pub fn Enc(comptime T: type) type {
-    switch (EncSize(T)) {
-        u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
-
-        else => switch (@typeInfo(T)) {
-            .@"struct", .@"enum", .@"union" => {
-                const encode_type = fn (
-                    *const T,
-                    std.mem.Allocator,
-                ) anyerror!meta.member(T, "Box");
-
-                return meta.has_decl(T, "encode", encode_type);
-            },
-            .array => return T,
-            else => @compileError(@typeName(T) ++ " does not satisfy Enc"),
-        },
-    }
-}
-
 pub fn EncSize(comptime T: type) type {
     switch (T) {
         u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
