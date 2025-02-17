@@ -32,7 +32,7 @@ pub fn main() !void {
 
         try key.data.fingerprint();
     } else {
-        const pem = try openssh.private.Pem.parse(contents);
+        const pem = try openssh.private.Key.Pem.parse(contents);
 
         const key = try openssh.private.Key.from_pem(gpa.allocator(), pem);
         defer key.deinit();

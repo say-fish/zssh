@@ -5,7 +5,7 @@ const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
 const Key = zssh.openssh.private.Key;
-const Pem = zssh.sk.Pem;
+const Pem = zssh.openssh.private.Key.Pem;
 
 const MAX_RUNS: usize = 0x01 << 26;
 

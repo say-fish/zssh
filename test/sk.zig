@@ -4,7 +4,7 @@ const std = @import("std");
 const zssh = @import("zssh");
 
 const Key = zssh.openssh.private.Key;
-const Pem = zssh.sk.Pem;
+const Pem = zssh.openssh.private.Key.Pem;
 
 const expect_equal = std.testing.expectEqual;
 const expect_equal_slices = std.testing.expectEqualSlices;
@@ -46,7 +46,7 @@ test "Rsa private key with passphrase" {
     const sk = try key.get_private_key(std.testing.allocator, "123");
     defer sk.deinit();
 
-    try std.testing.expect(sk.data.rsa._pad.verify());
+    try std.testing.expect(sk.data.rsa.pad.verify());
 
     try std.testing.expectEqualSlices(u8, sk.data.rsa.kind, "ssh-rsa");
     try std.testing.expectEqualSlices(u8, sk.data.rsa.comment, "root@locahost"); // FIXME: Fix typo

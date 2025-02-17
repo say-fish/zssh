@@ -1,19 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
 
 const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
-const Pem = zssh.sk.Pem;
 const Key = zssh.openssh.private.Key;
+const Pem = zssh.openssh.private.Key.Pem;
 
 const MAX_RUNS: usize = 0x01 << 26;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-
-    const allocator = gpa.allocator();
-
     defer if (gpa.deinit() == .leak) @panic("LEAK");
+    const allocator = gpa.allocator();
 
     const key = try Key.from_pem(allocator, try Pem.parse(@embedFile("rsa-key")));
     defer key.deinit();

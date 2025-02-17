@@ -671,12 +671,12 @@ pub const private = struct {
             q: []const u8,
 
             const Self = @This();
-            const Box = mem.Box([]u8, .sec);
+            pub const Box = mem.Box([]u8, .sec);
 
             pub fn encode(
                 self: *const Self,
                 allocator: std.mem.Allocator,
-            ) !Box {
+            ) anyerror!Box {
                 return try enc.encode_value(Self, allocator, self, .sec);
             }
 
@@ -701,12 +701,12 @@ pub const private = struct {
             sk: []const u8,
 
             const Self = @This();
-            const Box = mem.Box([]u8, .sec);
+            pub const Box = mem.Box([]u8, .sec);
 
             pub fn encode(
                 self: *const Self,
                 allocator: std.mem.Allocator,
-            ) !Box {
+            ) anyerror!Box {
                 return try enc.encode_value(Self, allocator, self, .sec);
             }
 
@@ -735,7 +735,7 @@ pub const private = struct {
             pub fn encode(
                 self: *const Self,
                 allocator: std.mem.Allocator,
-            ) !Box {
+            ) anyerror!Box {
                 return try enc.encode_value(Self, allocator, self, .sec);
             }
 
@@ -803,9 +803,9 @@ pub const private = struct {
 
         const Self = @This();
 
-        pub const Rsa = gen.KeyBlob(wire.Rsa, undefined);
-        pub const Ecdsa = gen.KeyBlob(wire.Ecdsa, undefined);
-        pub const Ed25519 = gen.KeyBlob(wire.Ed25519, undefined);
+        pub const Rsa = gen.MakeKeyBlob(wire.Rsa);
+        pub const Ecdsa = gen.MakeKeyBlob(wire.Ecdsa);
+        pub const Ed25519 = gen.MakeKeyBlob(wire.Ed25519);
 
         pub const Magic = public.Key.Magic;
 
@@ -880,7 +880,10 @@ pub const private = struct {
         }
     };
 
-    pub const Pem = gen.Pem;
-
-    pub const Key = gen.Sk(public.Key, KeyBlob);
+    pub const Key = gen.MakeSk(
+        gen.MakeMagic(enum { @"openssh-key-v1" }),
+        gen.MakePem("BEGIN OPENSSH PRIVATE KEY", "END OPENSSH PRIVATE KEY"),
+        public.Key,
+        KeyBlob,
+    );
 };

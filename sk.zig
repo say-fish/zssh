@@ -24,7 +24,7 @@ const Struct = meta.Struct;
 
 const I = std.mem.TokenIterator(u8, .sequence);
 
-fn MagicString(comptime T: type) type {
+pub fn MakeMagic(comptime T: type) type {
     return enc.GenericMagicString(
         T,
         I,
@@ -170,32 +170,37 @@ pub const Cipher = struct {
 
 /// "Newer" OpenSSH private key format. Will NOT work with old PKCS #1 or SECG
 /// keys.
-pub const Pem = struct {
-    pre: pem.Literal("BEGIN OPENSSH PRIVATE KEY", TokenIterator),
-    der: []const u8,
-    suf: pem.Literal("END OPENSSH PRIVATE KEY", TokenIterator),
+pub fn MakePem(
+    comptime pre: []const u8,
+    comptime pos: []const u8,
+) type {
+    return struct {
+        pre: pem.Literal(pre, TokenIterator),
+        der: []const u8,
+        suf: pem.Literal(pos, TokenIterator),
 
-    const Self = @This();
-    pub const TokenIterator = I;
+        const Self = @This();
+        pub const TokenIterator = I;
 
-    pub inline fn tokenize(src: []const u8) TokenIterator {
-        return std.mem.tokenizeSequence(u8, src, "-----");
-    }
+        pub inline fn tokenize(src: []const u8) TokenIterator {
+            return std.mem.tokenizeSequence(u8, src, "-----");
+        }
 
-    pub fn parse(src: []const u8) !Self {
-        return try pem.parse(Self, src);
-    }
+        pub fn parse(src: []const u8) !Self {
+            return try pem.parse(Self, src);
+        }
 
-    pub fn decode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-    ) !Box([]u8, .sec) {
-        const data =
-            try pem.decode_with_ignore(allocator, pem.base64.Decoder, self.der);
+        pub fn decode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) !Box([]u8, .sec) {
+            const data = try pem
+                .decode_with_ignore(allocator, pem.base64.Decoder, self.der);
 
-        return .{ .allocator = allocator, .data = data };
-    }
-};
+            return .{ .allocator = allocator, .data = data };
+        }
+    };
+}
 
 pub const Kdf = struct {
     salt: []const u8,
@@ -216,7 +221,12 @@ pub const Kdf = struct {
     }
 };
 
-pub fn Sk(comptime Pk: type, comptime Kb: type) type {
+pub fn MakeSk(
+    comptime MagicType: type,
+    comptime PemType: type,
+    comptime Pk: type,
+    comptime Kb: type,
+) type {
     return struct {
         magic: Magic,
         cipher: Cipher,
@@ -227,6 +237,8 @@ pub fn Sk(comptime Pk: type, comptime Kb: type) type {
         private_key_blob: []const u8,
 
         const Self = @This();
+        pub const Pem = PemType;
+        pub const Magic = MagicType;
 
         // FIXME:
         fn Optional(comptime T: type) type {
@@ -270,8 +282,6 @@ pub fn Sk(comptime Pk: type, comptime Kb: type) type {
                 }
             };
         }
-
-        pub const Magic = MagicString(enum { @"openssh-key-v1" });
 
         /// Returns `true` if the `private_key_blob` is encrypted, i.e.,
         /// cipher.name != "none"
@@ -325,7 +335,10 @@ pub fn Sk(comptime Pk: type, comptime Kb: type) type {
             return try from(src);
         }
 
-        pub fn from_pem(allocator: std.mem.Allocator, encoded_pem: Pem) !BoxRef(Self, .sec) {
+        pub fn from_pem(
+            allocator: std.mem.Allocator,
+            encoded_pem: Pem,
+        ) !BoxRef(Self, .sec) {
             const der = try encoded_pem.decode(allocator);
             errdefer der.deinit();
 
@@ -336,7 +349,10 @@ pub fn Sk(comptime Pk: type, comptime Kb: type) type {
             };
         }
 
-        pub fn encode(self: *const Self, allocator: std.mem.Allocator) !Box([]u8, .sec) {
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) anyerror!Box([]u8, .sec) {
             return try enc.encode_value(Self, allocator, self, .sec);
         }
 
@@ -353,15 +369,31 @@ pub fn Sk(comptime Pk: type, comptime Kb: type) type {
     };
 }
 
-pub fn KeyBlob(comptime T: type, _: Struct(T)) type {
-    // if (std.meta.declarations(T).len != 0)
-    //     @compileError("Cannot flatten structs with declarations (see: #6709)");
-
+/// Creates a private key blob for a given key type T, where the return type is
+/// of format:
+///
+/// ```zig
+/// struct {
+///     checksum: Checksum
+///     // inlined fields of T
+///     comment: []const u8,
+///     pad: enc.Padding,
+/// }
+/// ```
+///
+/// T must be a struct.
+pub fn MakeKeyBlob(comptime T: type) type {
     const B = struct { checksum: Checksum };
 
-    const A = struct { comment: []const u8, _pad: enc.Padding };
+    const A = struct {
+        comment: []const u8,
+        pad: enc.Padding,
+    };
 
-    const fields = std.meta.fields(B) ++ std.meta.fields(T) ++ std.meta.fields(A);
+    const fields =
+        std.meta.fields(B) ++
+        std.meta.fields(Struct(T)) ++
+        std.meta.fields(A);
 
     const ret: std.builtin.Type.Struct = .{
         .decls = &.{},
