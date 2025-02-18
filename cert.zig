@@ -9,18 +9,23 @@
 
 const std = @import("std");
 
-const magic = @import("magic.zig");
+const pk = @import("pk.zig");
+
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
-const meta = @import("meta.zig");
 const pem = @import("pem.zig");
-const pk = @import("pk.zig");
 const sig = @import("sig.zig");
+
+const meta = @import("meta.zig");
+
+const magic = @import("magic.zig");
 
 const And = meta.And;
 const Box = mem.Box;
-const BoxRef = mem.BoxRef;
+
 const Error = @import("error.zig").Error;
+
+const BoxRef = mem.BoxRef;
 
 const I = std.mem.TokenIterator(u8, .any);
 
@@ -28,6 +33,7 @@ pub fn MagicString(comptime T: type) type {
     return magic.MakeMagic(
         T,
         I,
+        []const u8,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     );
@@ -105,7 +111,7 @@ pub const Critical = struct {
         /// this feature in their signature formats.
         @"verify-required",
 
-        pub const STRINGS = enc.enum_to_str(Kind);
+        pub const STRINGS = magic.enum_to_str(Kind, []const u8);
 
         pub fn as_string(self: *const Kind) []const u8 {
             return Kind.STRINGS[@intFromEnum(self.*)];
@@ -207,7 +213,7 @@ pub const Extensions = struct {
         /// not present.
         @"permit-user-rc" = 0x01 << 5,
 
-        const STRINGS = enc.enum_to_str(Kind);
+        const STRINGS = magic.enum_to_str(Kind, []const u8);
 
         pub inline fn as_string(self: *const Kind) []const u8 {
             return STRINGS[@ctz(@intFromEnum(self.*))];

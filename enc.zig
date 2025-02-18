@@ -2,6 +2,7 @@
 const std = @import("std");
 
 const mem = @import("mem.zig");
+
 const meta = @import("meta.zig");
 
 const Error = @import("error.zig").Error;
@@ -9,6 +10,7 @@ const Mode = mem.Mode;
 const Container = meta.Container;
 const ForAll = meta.ForAll;
 const Struct = meta.Struct;
+const Enum = meta.Enum;
 
 pub fn Dec(comptime T: type) type {
     switch (T) {
@@ -63,20 +65,6 @@ pub fn Ser(comptime T: type) type {
     }
 }
 
-pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
-    if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
-
-    const fields = comptime std.meta.fields(T);
-
-    comptime var ret: [fields.len][]const u8 = undefined;
-
-    inline for (comptime fields, &ret) |field, *r| {
-        r.* = field.name;
-    }
-
-    return ret;
-}
-
 /// Parser continuation
 pub fn Cont(comptime T: type) type {
     return struct { usize, T };
@@ -125,7 +113,7 @@ pub const rfc4251 = struct {
 
     /// Returns the encoded size of a given value, the size is based on the
     /// `type` as per RFC-4251
-    pub fn encoded_size(value: anytype) u32 {
+    pub inline fn encoded_size(value: anytype) u32 {
         return switch (comptime @TypeOf(value)) {
             u32, u64 => |T| @sizeOf(T),
 
@@ -138,14 +126,14 @@ pub const rfc4251 = struct {
     }
 };
 
-pub fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]const u8) {
+pub inline fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]const u8) {
     const i = std.mem.indexOfScalar(u8, src, 0x00) orelse
         return Error.InvalidData;
 
     return .{ i + 1, src[0..i :0] };
 }
 
-pub fn null_terminated_str_encoded_size(src: []const u8) u32 {
+pub inline fn null_terminated_str_encoded_size(src: anytype) u32 {
     // FIXME: might overflow
     return @intCast(src.len + 1);
 }
@@ -382,20 +370,6 @@ test "encode [6]u8 (fixed size string)" {
     try serialize_any([6]u8, list.writer().any(), string);
 
     try expect_equal_strings(&string, list.items);
-}
-
-test enum_to_str {
-    const Enum = enum { foo, bar, baz, @"this-is-a-test-string" };
-
-    const strings = enum_to_str(Enum);
-
-    try expect_equal_strings("foo", strings[@intFromEnum(Enum.foo)]);
-    try expect_equal_strings("bar", strings[@intFromEnum(Enum.bar)]);
-    try expect_equal_strings("baz", strings[@intFromEnum(Enum.baz)]);
-    try expect_equal_strings(
-        "this-is-a-test-string",
-        strings[@intFromEnum(Enum.@"this-is-a-test-string")],
-    );
 }
 
 test parse_null_terminated_str {

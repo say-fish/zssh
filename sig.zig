@@ -13,11 +13,7 @@ const Error = @import("error.zig").Error;
 
 const I = std.mem.TokenIterator(u8, .sequence);
 
-fn fixed_string_encoded_size(_: anytype) u32 {
-    return 6;
-}
-
-fn parse_fixed_string(src: []const u8) Error!enc.Cont([6]u8) {
+inline fn parse_fixed_string(src: []const u8) Error!enc.Cont([6]u8) {
     if (src.len < 6) {
         return Error.MalformedString;
     }
@@ -25,10 +21,15 @@ fn parse_fixed_string(src: []const u8) Error!enc.Cont([6]u8) {
     return .{ 6, src[0..6].* };
 }
 
+inline fn fixed_string_encoded_size(_: anytype) u32 {
+    return 6;
+}
+
 pub fn Preamble(comptime T: type) type {
     return magic.MakeMagic(
         T,
         I,
+        [6]u8,
         parse_fixed_string,
         fixed_string_encoded_size,
     );
@@ -38,6 +39,7 @@ pub fn Magic(comptime T: type) type {
     return magic.MakeMagic(
         T,
         I,
+        []const u8,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     );

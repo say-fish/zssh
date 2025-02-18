@@ -51,6 +51,13 @@ pub fn Struct(comptime T: type) type {
     return T;
 }
 
+pub fn Enum(comptime T: type) type {
+    if (std.meta.activeTag(@typeInfo(T)) != .@"enum")
+        @compileError(@typeName(T) ++ "is not an enum");
+
+    return T;
+}
+
 pub fn member(comptime T: type, comptime name: []const u8) type {
     if (!@hasDecl(T, name))
         @compileError(@typeName(T) ++ " has no declaration named " ++ name);
@@ -81,4 +88,13 @@ pub fn has_decl(
         );
 
     return T;
+}
+
+pub fn is_array(comptime T: type) bool {
+    return @typeInfo(T) == .array;
+}
+
+/// Assumes T is an array
+pub fn array_len(comptime T: type) comptime_int {
+    return @typeInfo(T).array.len;
 }

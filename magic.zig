@@ -3,68 +3,86 @@ const std = @import("std");
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 
+const meta = @import("meta.zig");
+
+const Cont = enc.Cont;
+const Enum = meta.Enum;
+
 const Error = @import("error.zig").Error;
 
-/// Magic string of format T used by OpenSSH. Encoding is given by the return
-/// type of f.
-///
-/// * T must be an `enum`, where each enumeration corresponds to a **VALID**
-///   magic string for this given type.
-///
-/// * f must have this signature: `fn f([]const u8) Error!Cont(T)`.
+pub fn enum_to_str(
+    comptime T: type,
+    comptime E: type,
+) [std.meta.fields(Enum(T)).len]E {
+    if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
+
+    const fields = comptime std.meta.fields(T);
+
+    comptime var ret: [fields.len]E = undefined;
+
+    inline for (comptime fields, &ret) |field, *r| {
+        r.* = if (comptime meta.is_array(E))
+            field.name[0..meta.array_len(E)].*
+        else
+            field.name;
+    }
+
+    return ret;
+}
+
+/// Magic string of format T used by OpenSSH.
 pub fn MakeMagic(
     comptime T: type,
     comptime I: type,
-    f: anytype,
-    x: anytype,
+    comptime E: type,
+    parse_fn: fn ([]const u8) callconv(.@"inline") Error!Cont(E),
+    encoded_size_fn: fn (value: anytype) callconv(.@"inline") u32,
 ) type {
     return struct {
-        // TODO: Assert T is an enum
-        // TODO: Assert F is what we want
-        // TODO: assert X is what we want
         value: T,
 
         const Self = @This();
 
         pub const Box = mem.Box([]u8, .plain);
-        pub const Iterator = I;
+
         pub const Value = T;
 
-        const STRINGS = enc.enum_to_str(T);
+        pub const Iterator = I;
 
-        pub fn as_string(self: *const Self) []const u8 {
+        const STRINGS = enum_to_str(T, E);
+
+        pub fn as_string(self: *const Self) E {
             return STRINGS[@intFromEnum(self.value)];
         }
 
-        // FIXME:
         pub fn from_iter(it: *Iterator) Error!Self {
             const src = it.next() orelse
                 return error.InvalidFileFormat;
 
-            const ret = Self.from_slice(src) catch
-                return error.InvalidFileFormat;
+            const ret = try from_slice(src);
 
             return .{ .value = ret };
         }
 
         pub fn parse(src: []const u8) Error!enc.Cont(Self) {
-            const next, const magic = try f(src);
-            // Small hack, otherwise zig complains
-            const ref = switch (comptime @typeInfo(@TypeOf(magic))) {
-                .array => &magic,
-                else => magic,
-            };
+            const next, const magic = try parse_fn(src);
 
-            return .{ next, .{ .value = try from_slice(ref) } };
+            return .{ next, .{
+                .value = try from_slice(
+                    if (comptime meta.is_array(E)) &magic else magic,
+                ),
+            } };
         }
 
         pub fn from_slice(src: []const u8) Error!Value {
             // `stringToEnum` is slower that doing this dance
-            // return std.meta.stringToEnum(Value, src) orelse
-            //     return error.InvalidMagicString;
-            for (Self.STRINGS, 0..) |s, i|
-                if (std.mem.eql(u8, s, src))
+            for (STRINGS, 0..) |s, i| {
+                const ref = if (comptime meta.is_array(E)) &s else s;
+
+                if (std.mem.eql(u8, ref, src)) {
                     return @enumFromInt(i);
+                }
+            }
 
             return Error.InvalidMagicString;
         }
@@ -83,27 +101,14 @@ pub fn MakeMagic(
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return @intCast(x(self.as_string()));
+            return @intCast(encoded_size_fn(self.as_string()));
         }
 
         pub fn serialize(
             self: *const Self,
             writer: std.io.AnyWriter,
         ) anyerror!void {
-            const F = @FieldType(
-                @typeInfo(@typeInfo(@TypeOf(f)).@"fn".return_type.?).error_union.payload,
-                "1",
-            );
-            // FIXME:
-            const value: F = switch (F) {
-                [:0]u8,
-                [:0]const u8,
-                => std.mem.span(@as([*c]const u8, self.as_string().ptr)),
-                [6]u8 => self.as_string()[0..6].*,
-                else => self.as_string(),
-            };
-
-            try enc.serialize_any(F, writer, value);
+            try enc.serialize_any(E, writer, self.as_string());
         }
     };
 }
@@ -111,10 +116,25 @@ pub fn MakeMagic(
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
 
+test enum_to_str {
+    const TestEnum = enum { foo, bar, baz, @"this-is-a-test-string" };
+
+    const strings = enum_to_str(TestEnum, []const u8);
+
+    try expect_equal_strings("foo", strings[@intFromEnum(TestEnum.foo)]);
+    try expect_equal_strings("bar", strings[@intFromEnum(TestEnum.bar)]);
+    try expect_equal_strings("baz", strings[@intFromEnum(TestEnum.baz)]);
+    try expect_equal_strings(
+        "this-is-a-test-string",
+        strings[@intFromEnum(TestEnum.@"this-is-a-test-string")],
+    );
+}
+
 test "GenericMagicString `encoded_size`" {
     const magic = MakeMagic(
         enum { this_is_a_test_with_size_31 },
         std.mem.TokenIterator(u8, .any),
+        []const u8,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_31 };
@@ -126,6 +146,7 @@ test "GenericMagicString `encoded_size` (read_null_terminated)" {
     const magic = MakeMagic(
         enum { this_is_a_test_with_size_28 },
         std.mem.TokenIterator(u8, .any),
+        [:0]const u8,
         enc.parse_null_terminated_str,
         enc.null_terminated_str_encoded_size,
     ){ .value = .this_is_a_test_with_size_28 };
@@ -137,6 +158,7 @@ test "serialize GenericMagicString" {
     const magic = MakeMagic(
         enum { this_is_a_test_with_size_42 },
         std.mem.TokenIterator(u8, .any),
+        []const u8,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     ){ .value = .this_is_a_test_with_size_42 };

@@ -19,6 +19,7 @@ pub fn MakeMagic(comptime T: type) type {
     return magic.MakeMagic(
         T,
         I,
+        [:0]const u8,
         enc.parse_null_terminated_str,
         enc.null_terminated_str_encoded_size,
     );

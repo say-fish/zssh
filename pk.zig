@@ -17,6 +17,7 @@ pub fn MakeMagic(comptime T: type) type {
     return magic.MakeMagic(
         T,
         I,
+        []const u8,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     );
