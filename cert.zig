@@ -17,18 +17,10 @@ const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 const sig = @import("sig.zig");
 
-pub const Error = error{
-    /// This indicates, either, PEM corruption, or certificate corruption.
-    InvalidMagicString,
-    /// As per spec, repeated extension are not allowed.
-    RepeatedExtension,
-    UnkownExtension,
-} || enc.Error;
-
+const And = meta.And;
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
-
-const And = meta.And;
+const Error = @import("error.zig").Error;
 
 const I = std.mem.TokenIterator(u8, .any);
 
@@ -76,7 +68,7 @@ pub const CertType = enum(u2) {
 
     const Box = mem.Unmanaged(u8);
 
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(CertType) {
+    pub fn parse(src: []const u8) Error!enc.Cont(CertType) {
         const next, const val = try enc.rfc4251.parse_int(u32, src);
 
         return .{ next, @enumFromInt(val) };
@@ -128,7 +120,7 @@ pub const Critical = struct {
             return error.InvalidData;
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Kind) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Kind) {
             const next, const tag = try enc.rfc4251.parse_string(src);
 
             return .{ next, try Kind.from_slice(tag) };
@@ -139,7 +131,7 @@ pub const Critical = struct {
         kind: Kind,
         value: []const u8,
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Option) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Option) {
             const next, const kind = try Kind.parse(src);
 
             const final, const buf = try enc.rfc4251.parse_string(src[next..]);
@@ -150,7 +142,7 @@ pub const Critical = struct {
         }
     };
 
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Critical) {
+    pub fn parse(src: []const u8) Error!enc.Cont(Critical) {
         return try enc.parse_with_cont(Self, src);
     }
 
@@ -233,7 +225,7 @@ pub const Extensions = struct {
             return error.InvalidData;
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Kind) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Kind) {
             const next, const tag = try enc.rfc4251.parse_string(src);
 
             // XXX: Why is this null terminated?
@@ -247,7 +239,7 @@ pub const Extensions = struct {
         }
     };
 
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Extensions) {
+    pub fn parse(src: []const u8) Error!enc.Cont(Extensions) {
         return try enc.parse_with_cont(Self, src);
     }
 
@@ -291,7 +283,7 @@ const Principals = struct {
     pub const Principal = struct {
         value: []const u8,
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Principal) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Principal) {
             return try enc.parse_with_cont(Principal, src);
         }
     };
@@ -302,7 +294,7 @@ const Principals = struct {
         return .{ .ref = self.ref };
     }
 
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Principals) {
+    pub fn parse(src: []const u8) Error!enc.Cont(Principals) {
         const next, const ref = try enc.rfc4251.parse_string(src);
 
         return .{ next, .{ .ref = ref } };

@@ -6,10 +6,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub const Error = error{
-    /// Out of Memory.
-    OutOfMemory,
-};
+const Error = @import("error.zig").Error;
 
 /// "Mode of operation"
 pub const Mode = enum {

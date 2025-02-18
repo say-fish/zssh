@@ -4,22 +4,12 @@ const std = @import("std");
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
+
 const magic = @import("magic.zig");
-
-pub const Error = error{
-    /// This indicates, either: PEM corruption, DER corruption, or an
-    /// unsupported magic string.
-    InvalidMagicString,
-    /// The checksum for private keys is invalid, meaning either, decryption
-    /// was not successful, or data is corrupted. This is NOT an auth form
-    /// error.
-    InvalidChecksum,
-} || enc.Error || std.mem.Allocator.Error;
-
-// TODO: add support for FIDO2/U2F keys
 
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
+const Error = @import("error.zig").Error;
 
 const I = std.mem.TokenIterator(u8, .any);
 

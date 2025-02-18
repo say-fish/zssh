@@ -2,6 +2,8 @@ const std = @import("std");
 const mem = @import("mem.zig");
 const enc = @import("enc.zig");
 
+pub const Error = @import("error.zig").Error;
+
 pub const cert = struct {
     const gen = @import("cert.zig");
     const pk = @import("pk.zig");
@@ -31,7 +33,7 @@ pub const cert = struct {
 
         pub const Box = mem.Box(Self, .plain);
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
 
@@ -59,7 +61,7 @@ pub const cert = struct {
 
         pub const Box = mem.Box(Self, .plain);
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
 
@@ -84,7 +86,7 @@ pub const cert = struct {
 
         pub const Box = mem.Box(Self, .plain);
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
 
@@ -157,8 +159,6 @@ pub const cert = struct {
 
 pub const public = struct {
     const gen = @import("pk.zig");
-
-    pub const Error = gen.Error;
 
     pub const Rsa = struct {
         magic: Magic,
@@ -330,7 +330,7 @@ pub const public = struct {
             @"ssh-ed25519",
         });
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Key) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Key) {
             const next, const key = try enc.rfc4251.parse_string(src);
 
             return .{ next, Self.from_bytes(key) catch return Error.InvalidData };
@@ -423,11 +423,11 @@ pub const signature = struct {
             @"rsa-sha2-512",
         });
 
-        fn from(src: []const u8) enc.Error!Self {
+        fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             const next, const sig = try enc.rfc4251.parse_string(src);
 
             return .{ next, try Self.from(sig) };
@@ -456,11 +456,11 @@ pub const signature = struct {
 
             const Blob = @This();
 
-            fn from(src: []const u8) enc.Error!Blob {
+            fn from(src: []const u8) Error!Blob {
                 return try enc.parse(Blob, src);
             }
 
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Blob) {
+            pub fn parse(src: []const u8) Error!enc.Cont(Blob) {
                 const next, const blob = try enc.rfc4251.parse_string(src);
 
                 return .{ next, try Blob.from(blob) };
@@ -474,11 +474,11 @@ pub const signature = struct {
             @"ecdsa-sha2-nistp512",
         });
 
-        fn from(src: []const u8) enc.Error!Self {
+        fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             const next, const sig = try enc.rfc4251.parse_string(src);
 
             return .{ next, try Self.from(sig) };
@@ -496,11 +496,11 @@ pub const signature = struct {
 
         pub const Magic = gen.Magic(enum(u1) { @"ssh-ed25519" });
 
-        fn from(src: []const u8) enc.Error!Self {
+        fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             const next, const sig = try enc.rfc4251.parse_string(src);
 
             return .{ next, try Self.from(sig) };
@@ -522,7 +522,7 @@ pub const signature = struct {
             @"ssh-ed25519",
         });
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Signature) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Signature) {
             const next, const key = try enc.rfc4251.parse_string(src);
 
             return .{ next, Self.from_bytes(key) catch return error.InvalidData };
@@ -578,7 +578,7 @@ pub const signature = struct {
         pub const Preamble = gen.Preamble(enum { SSHSIG });
         pub const HashAlgorithm = gen.Magic(enum { sha256, sha512 });
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
 
@@ -761,7 +761,7 @@ pub const private = struct {
 
             // FIXME: Add encode
 
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            pub fn parse(src: []const u8) Error!enc.Cont(Self) {
                 const magic = Magic.from_bytes(src) catch
                     return error.InvalidData;
 
@@ -843,7 +843,7 @@ pub const private = struct {
             return ret;
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             // FIXME: Double work
             const off, _ = try gen.Checksum.parse(src);
             // FIXME: Double work

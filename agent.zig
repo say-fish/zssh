@@ -16,9 +16,11 @@ const sk = @import("sk.zig");
 // FIXME:
 const openssh = @import("openssh.zig");
 
+const Error = @import("error.zig").Error;
+
 fn msg_from_bytes(comptime T: type, src: []const u8) !T {
     if (src.len < @sizeOf(u32))
-        return error.MessageTooShort;
+        return Error.MessageTooShort;
 
     const msg_len = std.mem.readInt(u32, src[0..@sizeOf(u32)], .big);
 
@@ -88,7 +90,7 @@ pub const Agent = union(enum(u8)) {
             key: openssh.public.Key,
             comment: []const u8,
 
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Pk) {
+            pub fn parse(src: []const u8) Error!enc.Cont(Pk) {
                 return try enc.parse_with_cont(Pk, src);
             }
         };
@@ -99,7 +101,7 @@ pub const Agent = union(enum(u8)) {
             return if (self.keys) |keys| .{ .ref = keys } else null;
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             // No keys is explicit zero
             const next, const nkeys = try enc.rfc4251.parse_int(u32, src);
 
@@ -115,7 +117,7 @@ pub const Agent = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
     };
@@ -128,12 +130,12 @@ pub const Agent = union(enum(u8)) {
         pub const Query = struct {
             extensions: []const u8,
 
-            pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
+            pub fn parse(_: []const u8) Error!enc.Cont(Query) {
                 return .{ 0, .{ .extensions = &.{} } };
             }
         };
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try decode_as_string(Self, src);
         }
     };
@@ -218,7 +220,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
     };
@@ -229,7 +231,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
     };
@@ -239,7 +241,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
     };
@@ -250,7 +252,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(_: []const u8) Error!enc.Cont(Self) {
             @panic("TODO: AddSmartCardKey is not implemented");
         }
     };
@@ -262,7 +264,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(_: []const u8) Error!enc.Cont(Self) {
             @panic("TODO: AddSmartCardKeyConstrained is not implemented");
         }
     };
@@ -274,7 +276,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(_: []const u8) Error!enc.Cont(Self) {
             @panic("TODO: RemoveSmartcardKey is not implemented");
         }
     };
@@ -284,7 +286,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
     };
@@ -294,7 +296,7 @@ pub const Client = union(enum(u8)) {
 
         const Self = @This();
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
     };
@@ -309,7 +311,7 @@ pub const Client = union(enum(u8)) {
         pub const Constraints = struct {
             ref: []const u8,
 
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraints) {
+            pub fn parse(src: []const u8) Error!enc.Cont(Constraints) {
                 // TODO: Check for null
                 return .{ src.len, .{ .ref = src } };
             }
@@ -329,25 +331,25 @@ pub const Client = union(enum(u8)) {
             pub const Lifetime = struct {
                 sec: u32,
 
-                pub fn parse(src: []const u8) enc.Error!enc.Cont(Lifetime) {
+                pub fn parse(src: []const u8) Error!enc.Cont(Lifetime) {
                     return try enc.parse_with_cont(Lifetime, src);
                 }
             };
 
             pub const Confirm = struct {
-                pub fn parse(src: []const u8) enc.Error!enc.Cont(Confirm) {
+                pub fn parse(src: []const u8) Error!enc.Cont(Confirm) {
                     std.debug.assert(src.len == 0);
 
                     return .{ 0, .{} };
                 }
             };
 
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Constraint) {
+            pub fn parse(src: []const u8) Error!enc.Cont(Constraint) {
                 return try decode(Constraint, src);
             }
         };
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
     };
@@ -360,12 +362,12 @@ pub const Client = union(enum(u8)) {
         const Self = @This();
 
         pub const Query = struct {
-            pub fn parse(_: []const u8) enc.Error!enc.Cont(Query) {
+            pub fn parse(_: []const u8) Error!enc.Cont(Query) {
                 return .{ 0, .{} };
             }
         };
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try decode_as_string(Self, src);
         }
     };
@@ -393,7 +395,7 @@ pub const openssh_extensions = struct {
 
             const Self = @This();
 
-            pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+            pub fn parse(src: []const u8) Error!enc.Cont(Self) {
                 return try enc.parse_with_cont(Self, src);
             }
         };
@@ -419,7 +421,7 @@ pub const openssh_extensions = struct {
         const MaxSignatures = struct {};
         const AssociatedCerts = struct {};
 
-        pub fn parse(_: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(_: []const u8) Error!enc.Cont(Self) {
             @panic("TODO:");
             //return enc.parse(Constraints, src);
         }
@@ -468,7 +470,7 @@ pub const openssh_extensions = struct {
 //     }
 // };
 
-pub fn decode_as_string(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
+pub fn decode_as_string(comptime T: type, src: []const u8) Error!enc.Cont(T) {
     const Tag = comptime std.meta.Tag(T);
 
     const next, const kind = try enc.rfc4251.parse_string(src);
@@ -494,7 +496,7 @@ pub fn decode_as_string(comptime T: type, src: []const u8) enc.Error!enc.Cont(T)
 }
 
 // TODO: Move this to enc (with a decode tag)
-pub fn decode(comptime T: type, src: []const u8) enc.Error!enc.Cont(T) {
+pub fn decode(comptime T: type, src: []const u8) Error!enc.Cont(T) {
     const Tag = comptime std.meta.Tag(T);
 
     // @compileLog(Tag);

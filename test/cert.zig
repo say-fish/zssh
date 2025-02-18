@@ -3,9 +3,12 @@ const std = @import("std");
 
 const zssh = @import("zssh");
 
-const Cert = zssh.openssh.cert.Cert;
 const Pem = zssh.openssh.cert.Pem;
 const Rsa = zssh.openssh.cert.Rsa;
+
+const Cert = zssh.openssh.cert.Cert;
+
+const Error = zssh.openssh.Error;
 
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
@@ -60,7 +63,7 @@ test "parse rsa cert bad cert" {
 
     const cert = Cert.from_bytes(der.data);
 
-    try expect_error(zssh.cert.Error.MalformedString, cert);
+    try expect_error(Error.MalformedString, cert);
 }
 
 test "parse ecdsa cert" {
@@ -294,7 +297,7 @@ test "parse ed25519 cert with wrong magic string" {
     const pem = try Pem.parse(@embedFile("ed25519-cert-wrong-magic-string.pub"));
 
     try expect_error(
-        error.InvalidData, // FIXME: InvalidMagicString
+        Error.InvalidMagicString,
         Cert.from_pem(std.testing.allocator, std.base64.standard.Decoder, &pem),
     );
 }

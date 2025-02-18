@@ -4,13 +4,9 @@ const builtin = @import("builtin");
 
 const meta = @import("meta.zig");
 
+const Error = @import("error.zig").Error;
 const ForAll = meta.ForAll;
 const Struct = meta.Struct;
-
-pub const Error = error{
-    InvalidFileFormat,
-    InvalidLiteral,
-};
 
 pub fn FromIter(comptime T: type) type {
     if (@typeInfo(T) == .@"struct") {

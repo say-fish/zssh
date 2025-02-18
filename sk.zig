@@ -8,19 +8,9 @@ const meta = @import("meta.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 
-pub const Error = error{
-    /// This indicates, either: PEM corruption, DER corruption, or an
-    /// unsupported magic string.
-    InvalidMagicString,
-    /// The checksum for private keys is invalid, meaning either, decryption
-    /// was not successful, or data is corrupted. This is NOT an auth form
-    /// error.
-    InvalidChecksum,
-} || enc.Error || std.mem.Allocator.Error;
-
+const Error = @import("error.zig").Error;
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
-
 const Struct = meta.Struct;
 
 const I = std.mem.TokenIterator(u8, .sequence);
@@ -95,7 +85,7 @@ pub const Checksum = struct {
             @as(u32, @truncate(value));
     }
 
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+    pub fn parse(src: []const u8) Error!enc.Cont(Self) {
         const next, const checksum = try enc.rfc4251.parse_int(u64, src);
 
         // XXX: This is not realy great
@@ -148,7 +138,7 @@ pub const Cipher = struct {
         return ret;
     }
 
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Cipher) {
+    pub fn parse(src: []const u8) Error!enc.Cont(Cipher) {
         const next, const name = try enc.rfc4251.parse_string(src);
 
         inline for (comptime Self.ciphers) |cipher| {
@@ -157,7 +147,7 @@ pub const Cipher = struct {
             }
         }
 
-        return enc.Error.InvalidData;
+        return Error.InvalidData;
     }
 
     pub fn serialize(self: *const Self, writer: std.io.AnyWriter) anyerror!void {
@@ -209,11 +199,11 @@ pub const Kdf = struct {
 
     const Self = @This();
 
-    pub fn parse(src: []const u8) enc.Error!enc.Cont(Kdf) {
+    pub fn parse(src: []const u8) Error!enc.Cont(Kdf) {
         return try enc.parse_with_cont(Self, src);
     }
 
-    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) !void {
+    pub fn serialize(self: *const Self, writer: std.io.AnyWriter) anyerror!void {
         try enc.serialize_struct(Self, writer, self);
     }
 
@@ -246,7 +236,7 @@ pub fn MakeSk(
             return struct {
                 opt: ?T,
 
-                pub fn parse(src: []const u8) enc.Error!enc.Cont(@This()) {
+                pub fn parse(src: []const u8) Error!enc.Cont(@This()) {
                     const next, const inner = try enc.rfc4251.parse_string(src);
 
                     if (inner.len == 0)

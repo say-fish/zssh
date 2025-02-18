@@ -3,10 +3,7 @@ const std = @import("std");
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 
-const Error = error{
-    /// Invalid/Unsupported magic string
-    InvalidMagicString,
-} || mem.Error || enc.Error;
+const Error = @import("error.zig").Error;
 
 /// Magic string of format T used by OpenSSH. Encoding is given by the return
 /// type of f.
@@ -40,7 +37,7 @@ pub fn MakeMagic(
         }
 
         // FIXME:
-        pub fn from_iter(it: *Iterator) @import("pem.zig").Error!Self {
+        pub fn from_iter(it: *Iterator) Error!Self {
             const src = it.next() orelse
                 return error.InvalidFileFormat;
 
@@ -50,7 +47,7 @@ pub fn MakeMagic(
             return .{ .value = ret };
         }
 
-        pub fn parse(src: []const u8) enc.Error!enc.Cont(Self) {
+        pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             const next, const magic = try f(src);
             // Small hack, otherwise zig complains
             const ref = switch (comptime @typeInfo(@TypeOf(magic))) {
@@ -58,12 +55,7 @@ pub fn MakeMagic(
                 else => magic,
             };
 
-            return .{
-                next, .{
-                    .value = from_slice(ref) catch
-                        return enc.Error.InvalidData, // FIXME:
-                },
-            };
+            return .{ next, .{ .value = try from_slice(ref) } };
         }
 
         pub fn from_slice(src: []const u8) Error!Value {
@@ -77,7 +69,7 @@ pub fn MakeMagic(
             return Error.InvalidMagicString;
         }
 
-        pub fn from_bytes(src: []const u8) enc.Error!Self {
+        pub fn from_bytes(src: []const u8) Error!Self {
             _, const magic = try Self.parse(src);
 
             return magic;

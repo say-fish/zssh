@@ -4,25 +4,8 @@ const std = @import("std");
 const mem = @import("mem.zig");
 const meta = @import("meta.zig");
 
-pub const Error = error{
-    /// Invalid RFC-4251 integer
-    MalformedInteger,
-    /// Invalid RFC-4251 string
-    MalformedString,
-    /// Malformed RFC-4251 mpint
-    MalformedMpInt, // TODO:
-    /// Object specific invalid data
-    InvalidLiteral,
-    /// Data is invalid or corrupted
-    InvalidData,
-    /// The checksum for private keys is invalid, meaning either, decryption
-    /// was not successful, or data is corrupted. This is **NOT** an auth form
-    /// error.
-    InvalidChecksum,
-} || mem.Error;
-
+const Error = @import("error.zig").Error;
 const Mode = mem.Mode;
-
 const Container = meta.Container;
 const ForAll = meta.ForAll;
 const Struct = meta.Struct;

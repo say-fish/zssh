@@ -7,10 +7,9 @@ const mem = @import("mem.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 
-// TODO: Error
-
 const Box = mem.Box;
 const BoxRef = mem.BoxRef;
+const Error = @import("error.zig").Error;
 
 const I = std.mem.TokenIterator(u8, .sequence);
 
@@ -18,9 +17,9 @@ fn fixed_string_encoded_size(_: anytype) u32 {
     return 6;
 }
 
-fn parse_fixed_string(src: []const u8) enc.Error!enc.Cont([6]u8) {
+fn parse_fixed_string(src: []const u8) Error!enc.Cont([6]u8) {
     if (src.len < 6) {
-        return enc.Error.MalformedString;
+        return Error.MalformedString;
     }
 
     return .{ 6, src[0..6].* };
