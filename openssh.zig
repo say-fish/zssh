@@ -168,7 +168,7 @@ pub const public = struct {
         const Self = @This();
 
         pub const Box = mem.Box([]u8, .plain);
-        pub const Magic = gen.Magic(enum { @"ssh-rsa" });
+        pub const Magic = gen.MakeMagic(enum { @"ssh-rsa" });
 
         fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
@@ -228,7 +228,7 @@ pub const public = struct {
         const Self = @This();
 
         pub const Box = mem.Box([]u8, .plain);
-        pub const Magic = gen.Magic(enum {
+        pub const Magic = gen.MakeMagic(enum {
             @"ecdsa-sha2-nistp256",
             @"ecdsa-sha2-nistp384",
             @"ecdsa-sha2-nistp521",
@@ -275,7 +275,7 @@ pub const public = struct {
 
         const Self = @This();
 
-        pub const Magic = gen.Magic(enum { @"ssh-ed25519" });
+        pub const Magic = gen.MakeMagic(enum { @"ssh-ed25519" });
         pub const Box = mem.Box([]u8, .plain);
 
         fn from(src: []const u8) Error!Ed25519 {
@@ -322,7 +322,7 @@ pub const public = struct {
         pub const Pem = gen.Pem(Magic);
         pub const Box = mem.Box([]u8, .plain);
         pub const BoxRef = mem.BoxRef(Self, .plain);
-        pub const Magic = gen.Magic(enum {
+        pub const Magic = gen.MakeMagic(enum {
             @"ssh-rsa",
             @"ecdsa-sha2-nistp256",
             @"ecdsa-sha2-nistp384",

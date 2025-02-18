@@ -13,8 +13,6 @@ pub const Error = error{
     MalformedMpInt, // TODO:
     /// Object specific invalid data
     InvalidLiteral,
-    /// Invalid/Unsupported magic string
-    InvalidMagicString,
     /// Data is invalid or corrupted
     InvalidData,
     /// The checksum for private keys is invalid, meaning either, decryption
@@ -96,109 +94,6 @@ pub fn enum_to_str(comptime T: type) [std.meta.fields(T).len][]const u8 {
     return ret;
 }
 
-/// Magic string of format T used by OpenSSH. Encoding is given by the return
-/// type of f.
-///
-/// * T must be an `enum`, where each enumeration corresponds to a **VALID**
-///   magic string for this given type.
-///
-/// * f must have this signature: `fn f([]const u8) Error!Cont(T)`.
-pub fn GenericMagicString(
-    comptime T: type,
-    comptime I: type,
-    f: anytype,
-    x: anytype,
-) type {
-    return struct {
-        // TODO: Assert T is an enum
-        // TODO: Assert F is what we want
-        // TODO: assert X is what we want
-        value: T,
-
-        const Self = @This();
-
-        pub const Box = mem.Box([]u8, .plain);
-        pub const Iterator = I;
-        pub const Value = T;
-
-        const STRINGS = enum_to_str(T);
-
-        pub fn as_string(self: *const Self) []const u8 {
-            return STRINGS[@intFromEnum(self.value)];
-        }
-
-        // FIXME:
-        pub fn from_iter(it: *Iterator) @import("pem.zig").Error!Self {
-            const src = it.next() orelse
-                return error.InvalidFileFormat;
-
-            const ret = Self.from_slice(src) catch
-                return error.InvalidFileFormat;
-
-            return .{ .value = ret };
-        }
-
-        pub fn parse(src: []const u8) Error!Cont(Self) {
-            const next, const magic = try f(src);
-            // Small hack, otherwise zig complains
-            const ref = switch (comptime @typeInfo(@TypeOf(magic))) {
-                .array => &magic,
-                else => magic,
-            };
-
-            return .{ next, .{ .value = try Self.from_slice(ref) } };
-        }
-
-        // `stringToEnum` is slower that doing this dance
-        pub fn from_slice(src: []const u8) Error!Value {
-            for (Self.STRINGS, 0..) |s, i|
-                if (std.mem.eql(u8, s, src))
-                    return @enumFromInt(i);
-
-            return Error.InvalidMagicString;
-            // return std.meta.stringToEnum(Value, src) orelse
-            //     return error.InvalidMagicString;
-        }
-
-        pub fn from_bytes(src: []const u8) Error!Self {
-            _, const magic = try Self.parse(src);
-
-            return magic;
-        }
-
-        pub fn encode(
-            self: *const Self,
-            allocator: std.mem.Allocator,
-        ) anyerror!Box {
-            return encode_value(Self, allocator, self, .plain);
-        }
-
-        pub fn encoded_size(self: *const Self) u32 {
-            return @intCast(x(self.as_string()));
-        }
-
-        pub fn serialize(
-            self: *const Self,
-            writer: std.io.AnyWriter,
-        ) anyerror!void {
-            const F = @FieldType(
-                @typeInfo(@typeInfo(@TypeOf(f)).@"fn".return_type.?).error_union.payload,
-                "1",
-            );
-            // FIXME:
-            const value: F = switch (F) {
-                [:0]u8,
-                [:0]const u8,
-                => std.mem.span(@as([*c]const u8, self.as_string().ptr)),
-                [6]u8 => self.as_string()[0..6].*,
-                else => self.as_string(),
-            };
-
-            try serialize_any(F, writer, value);
-        }
-    };
-}
-
 /// Parser continuation
 pub fn Cont(comptime T: type) type {
     return struct { usize, T };
@@ -261,9 +156,10 @@ pub const rfc4251 = struct {
 };
 
 pub fn parse_null_terminated_str(src: []const u8) Error!Cont([:0]const u8) {
-    const ret: [:0]const u8 = std.mem.span(@as([*c]const u8, src.ptr));
+    const i = std.mem.indexOfScalar(u8, src, 0x00) orelse
+        return Error.InvalidData;
 
-    return .{ ret.len + 1, ret };
+    return .{ i + 1, src[0..i :0] };
 }
 
 pub fn null_terminated_str_encoded_size(src: []const u8) u32 {
@@ -446,28 +342,6 @@ pub fn GenericIterator(comptime T: type) type {
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
 
-test "GenericMagicString `encoded_size`" {
-    const magic = GenericMagicString(
-        enum { this_is_a_test_with_size_31 },
-        std.mem.TokenIterator(u8, .any),
-        rfc4251.parse_string,
-        rfc4251.encoded_size,
-    ){ .value = .this_is_a_test_with_size_31 };
-
-    try expect_equal(31, magic.encoded_size());
-}
-
-test "GenericMagicString `encoded_size` (read_null_terminated)" {
-    const magic = GenericMagicString(
-        enum { this_is_a_test_with_size_28 },
-        std.mem.TokenIterator(u8, .any),
-        parse_null_terminated_str,
-        null_terminated_str_encoded_size,
-    ){ .value = .this_is_a_test_with_size_28 };
-
-    try expect_equal(28, magic.encoded_size());
-}
-
 test "encode u32" {
     var list = std.ArrayList(u8).init(std.testing.allocator);
     defer list.deinit();
@@ -527,24 +401,6 @@ test "encode [6]u8 (fixed size string)" {
     try expect_equal_strings(&string, list.items);
 }
 
-test "serialize GenericMagicString" {
-    const magic = GenericMagicString(
-        enum { this_is_a_test_with_size_42 },
-        std.mem.TokenIterator(u8, .any),
-        rfc4251.parse_string,
-        rfc4251.encoded_size,
-    ){ .value = .this_is_a_test_with_size_42 };
-
-    var list = std.ArrayList(u8).init(std.testing.allocator);
-    defer list.deinit();
-
-    try magic.serialize(list.writer().any());
-    try expect_equal(
-        .this_is_a_test_with_size_42,
-        (try @TypeOf(magic).from_bytes(list.items)).value,
-    );
-}
-
 test enum_to_str {
     const Enum = enum { foo, bar, baz, @"this-is-a-test-string" };
 
@@ -564,12 +420,9 @@ test parse_null_terminated_str {
     const malformed: []const u8 = &[_]u8{ 0x72, 0x72, 0x72 };
 
     _, const a = try parse_null_terminated_str(str);
-    _, const b = try parse_null_terminated_str(malformed);
-    //       ^
-    //       |
-    //       +-- This is fine since we will read to the end of the slice
+    const b = parse_null_terminated_str(malformed);
 
     try expect_equal(3, a.len);
-    try expect_equal(3, b.len);
-    try expect_equal_strings(a, b);
+    try expect_equal(Error.InvalidData, b);
+    try expect_equal_strings(a, "rrr");
 }

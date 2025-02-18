@@ -215,6 +215,17 @@ pub fn build(b: *std.Build) void {
 
         add_test(b, test_step, .{
             .name = "mem",
+            .root_source_file = b.path("magic.zig"),
+            .target = target,
+            .optimize = optimize,
+            .mod = mod,
+            .mod_name = "zssh",
+            .use_lld = lld,
+            .use_llvm = llvm,
+        }) catch @panic("OOM");
+
+        add_test(b, test_step, .{
+            .name = "mem",
             .root_source_file = b.path("mem.zig"),
             .target = target,
             .optimize = optimize,

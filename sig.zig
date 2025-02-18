@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
 
+const magic = @import("magic.zig");
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
@@ -26,7 +27,7 @@ fn parse_fixed_string(src: []const u8) enc.Error!enc.Cont([6]u8) {
 }
 
 pub fn Preamble(comptime T: type) type {
-    return enc.GenericMagicString(
+    return magic.MakeMagic(
         T,
         I,
         parse_fixed_string,
@@ -35,7 +36,7 @@ pub fn Preamble(comptime T: type) type {
 }
 
 pub fn Magic(comptime T: type) type {
-    return enc.GenericMagicString(
+    return magic.MakeMagic(
         T,
         I,
         enc.rfc4251.parse_string,

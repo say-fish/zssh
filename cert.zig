@@ -9,6 +9,7 @@
 
 const std = @import("std");
 
+const magic = @import("magic.zig");
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 const meta = @import("meta.zig");
@@ -32,7 +33,7 @@ const And = meta.And;
 const I = std.mem.TokenIterator(u8, .any);
 
 pub fn MagicString(comptime T: type) type {
-    return enc.GenericMagicString(
+    return magic.MakeMagic(
         T,
         I,
         enc.rfc4251.parse_string,

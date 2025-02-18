@@ -2,6 +2,7 @@
 const std = @import("std");
 
 const enc = @import("enc.zig");
+const magic = @import("magic.zig");
 const mem = @import("mem.zig");
 const meta = @import("meta.zig");
 const pem = @import("pem.zig");
@@ -25,7 +26,7 @@ const Struct = meta.Struct;
 const I = std.mem.TokenIterator(u8, .sequence);
 
 pub fn MakeMagic(comptime T: type) type {
-    return enc.GenericMagicString(
+    return magic.MakeMagic(
         T,
         I,
         enc.parse_null_terminated_str,

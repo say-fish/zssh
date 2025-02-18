@@ -4,6 +4,7 @@ const std = @import("std");
 const enc = @import("enc.zig");
 const mem = @import("mem.zig");
 const pem = @import("pem.zig");
+const magic = @import("magic.zig");
 
 pub const Error = error{
     /// This indicates, either: PEM corruption, DER corruption, or an
@@ -22,8 +23,8 @@ const BoxRef = mem.BoxRef;
 
 const I = std.mem.TokenIterator(u8, .any);
 
-pub fn Magic(comptime T: type) type {
-    return enc.GenericMagicString(
+pub fn MakeMagic(comptime T: type) type {
+    return magic.MakeMagic(
         T,
         I,
         enc.rfc4251.parse_string,
