@@ -5,7 +5,7 @@ const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
 const Ed25519 = zssh.openssh.cert.Ed25519;
-const Pem = zssh.openssh.cert.Pem;
+const Pem = zssh.openssh.cert.Cert.Pem;
 
 const MAX_RUNS: usize = 0x01 << 26;
 

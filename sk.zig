@@ -179,7 +179,7 @@ pub fn MakePem(
         }
 
         pub fn parse(src: []const u8) !Self {
-            return try pem.parse(Self, src);
+            return try pem.parse(Self, TokenIterator, src);
         }
 
         pub fn decode(

@@ -8,23 +8,31 @@ const Error = @import("error.zig").Error;
 const ForAll = meta.ForAll;
 const Struct = meta.Struct;
 
-pub fn FromIter(comptime T: type) type {
-    if (@typeInfo(T) == .@"struct") {
-        const decl_type = fn (*meta.member(T, "Iterator")) Error!T;
+pub fn FromIter(comptime I: type) fn (comptime type) type {
+    return struct {
+        fn Curry(comptime T: type) type {
+            if (@typeInfo(T) == .@"struct") {
+                const decl_type = fn (*I) Error!T;
 
-        return meta.has_decl(T, "from_iter", decl_type);
-    }
+                return meta.has_decl(T, "from_iter", decl_type);
+            }
 
-    if (T == []const u8) return T;
+            if (T == []const u8) return T;
 
-    @compileError(@typeName(T) ++ " does not satisfy FromIter");
+            @compileError(@typeName(T) ++ " does not satisfy FromIter");
+        }
+    }.Curry;
 }
 
-pub fn Tokenize(comptime T: type) type {
-    const decl_type =
-        fn ([]const u8) callconv(.@"inline") meta.member(T, "TokenIterator");
+pub fn Tokenize(comptime I: type) fn (comptime type) type {
+    return struct {
+        fn Curry(comptime T: type) type {
+            const decl_type =
+                fn ([]const u8) callconv(.@"inline") I;
 
-    return meta.has_decl(T, "tokenize", decl_type);
+            return meta.has_decl(T, "tokenize", decl_type);
+        }
+    }.Curry;
 }
 
 pub fn Literal(comptime L: []const u8, comptime I: type) type {
@@ -65,14 +73,15 @@ pub fn Blob(comptime I: type) type {
 // TODO: AutoDecoder
 pub fn parse(
     comptime T: type,
+    comptime I: type,
     src: []const u8,
-) !ForAll(FromIter, Tokenize(Struct(T))) {
+) Error!ForAll(FromIter(I), Tokenize(I)(Struct(T))) {
     var it = T.tokenize(src);
 
     var ret: T = undefined;
 
     inline for (comptime std.meta.fields(T)) |field| {
-        if (@typeInfo(field.type) == .@"struct") {
+        if (comptime meta.is_struct(field.type)) {
             @field(ret, field.name) = try field.type.from_iter(&it);
 
             continue;
@@ -83,9 +92,7 @@ pub fn parse(
 
         @field(ret, field.name) = switch (field.type) {
             []const u8 => ref,
-            else => @compileError(
-                "cannot parse type " ++ @typeName(field.type),
-            ),
+            else => comptime unreachable,
         };
     }
 
@@ -96,13 +103,15 @@ pub fn decode(
     allocator: std.mem.Allocator,
     decoder: std.base64.Base64Decoder,
     src: []const u8,
-) ![]u8 {
-    const len = try decoder.calcSizeForSlice(src);
+) Error![]u8 {
+    const len = decoder.calcSizeForSlice(src) catch
+        return Error.InvalidBase64Data;
 
     const der = try allocator.alloc(u8, len);
     errdefer allocator.free(der);
 
-    try decoder.decode(der, src);
+    decoder.decode(der, src) catch
+        return Error.InvalidBase64Data;
 
     return der;
 }

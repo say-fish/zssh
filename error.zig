@@ -23,4 +23,5 @@ pub const Error = error{
     UnkownExtension,
     InvalidFileFormat,
     MsgLenMismatch,
+    InvalidBase64Data,
 };

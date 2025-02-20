@@ -47,11 +47,6 @@ pub const Query = struct {
     }
 };
 
-// TODO: 3.2.7. Key Constraints
-// SSH_AGENT_CONSTRAIN_LIFETIME                    1
-// SSH_AGENT_CONSTRAIN_CONFIRM                     2
-// SSH_AGENT_CONSTRAIN_EXTENSION                   255
-
 // TODO: 3.8.1. Query extension
 pub fn MakeAgent(
     comptime Pk: type,
@@ -97,8 +92,10 @@ pub fn MakeAgent(
         /// Protocl number: SSH_AGENT_EXTENSION_RESPONSE = 29,
         extension_response: Dec(ExtensionResponse) = 29,
 
-        pub fn from_bytes(src: []const u8) !@This() {
-            return try msg_from_bytes(@This(), src);
+        const Self = @This();
+
+        pub fn from_bytes(src: []const u8) Error!Self {
+            return try msg_from_bytes(Self, src);
         }
     };
 }
@@ -110,7 +107,7 @@ pub fn IdentitiesAnswer(comptime Pk: type) type {
 
         const Self = @This();
 
-        pub const Iterator = enc.GenericIterator(AddIdentity(Pk));
+        pub const Iterator = enc.GenericIterator(Identity(Pk));
 
         pub fn iter(self: *const Self) ?Iterator {
             return if (self.keys) |keys| .{ .ref = keys } else null;
@@ -240,9 +237,9 @@ pub fn SignRequest(comptime Pk: type) type {
     };
 }
 
-pub fn AddIdentity(comptime Sk: type) type {
+pub fn Identity(comptime Key: type) type {
     return struct {
-        key: Union(Sk),
+        key: Union(Key),
         comment: []const u8,
 
         const Self = @This();
@@ -251,6 +248,10 @@ pub fn AddIdentity(comptime Sk: type) type {
             return try enc.parse_with_cont(Self, src);
         }
     };
+}
+
+pub fn AddIdentity(comptime Sk: type) type {
+    return Identity(Sk);
 }
 
 pub fn RemoveIdentity(comptime Pk: type) type {

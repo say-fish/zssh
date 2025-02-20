@@ -97,6 +97,10 @@ pub fn has_decl(
     return T;
 }
 
+pub fn is_struct(comptime T: type) bool {
+    return @typeInfo(T) == .@"struct";
+}
+
 pub fn is_array(comptime T: type) bool {
     return @typeInfo(T) == .array;
 }

@@ -25,46 +25,44 @@ const Box = mem.Box;
 
 const Error = @import("error.zig").Error;
 
-const BoxRef = mem.BoxRef;
-
-const I = std.mem.TokenIterator(u8, .any);
-
-pub fn MagicString(comptime T: type) type {
+pub fn MakeMagic(comptime T: type) type {
     return magic.MakeMagic(
         T,
-        I,
+        std.mem.TokenIterator(u8, .any),
         []const u8,
         enc.rfc4251.parse_string,
         enc.rfc4251.encoded_size,
     );
 }
 
-pub const Pem = struct {
-    magic: []const u8, // FIXME: MagicString
-    der: []const u8,
-    comment: pem.Blob(TokenIterator),
+pub fn MakePem(comptime Magic: type) type {
+    return struct {
+        magic: Magic,
+        der: []const u8,
+        comment: pem.Blob(TokenIterator),
 
-    const Self = @This();
-    pub const TokenIterator = I;
+        const Self = @This();
+        pub const TokenIterator = std.mem.TokenIterator(u8, .any);
 
-    pub inline fn tokenize(src: []const u8) TokenIterator {
-        return std.mem.tokenizeAny(u8, src, " ");
-    }
+        pub inline fn tokenize(src: []const u8) TokenIterator {
+            return std.mem.tokenizeAny(u8, src, " ");
+        }
 
-    pub fn parse(src: []const u8) !Self {
-        return try pem.parse(Self, src);
-    }
+        pub fn parse(src: []const u8) Error!Self {
+            return try pem.parse(Self, TokenIterator, src);
+        }
 
-    pub fn decode(
-        self: *const Self,
-        allocator: std.mem.Allocator,
-        decoder: std.base64.Base64Decoder,
-    ) !Box([]u8, .plain) {
-        const data = try pem.decode(allocator, decoder, self.der);
+        pub fn decode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+            decoder: std.base64.Base64Decoder,
+        ) Error!Box([]u8, .plain) {
+            const data = try pem.decode(allocator, decoder, self.der);
 
-        return .{ .allocator = allocator, .data = data };
-    }
-};
+            return .{ .allocator = allocator, .data = data };
+        }
+    };
+}
 
 pub const CertType = enum(u2) {
     user = 1,
@@ -312,7 +310,7 @@ const Principals = struct {
 };
 
 /// Generic type for a SSH certificate.
-pub fn GenericCert(
+pub fn MakeCert(
     comptime M: type, // Magic preamble
     comptime T: type, // Type of the public_key
     comptime P: type, // Type of signature_key
@@ -345,18 +343,18 @@ pub fn GenericCert(
             return try enc.parse(Self, src);
         }
 
-        pub fn from_pem(
-            allocator: std.mem.Allocator,
-            decoder: std.base64.Base64Decoder,
-            pem_enc: *const Pem,
-        ) !BoxRef(Self, .plain) {
-            var der = try pem_enc.decode(allocator, decoder);
-            errdefer der.deinit();
+        // pub fn from_pem(
+        //     allocator: std.mem.Allocator,
+        //     decoder: std.base64.Base64Decoder,
+        //     pem_enc: *const Pem,
+        // ) !BoxRef(Self, .plain) {
+        //     var der = try pem_enc.decode(allocator, decoder);
+        //     errdefer der.deinit();
 
-            const cert = try Self.from_bytes(der.data);
+        //     const cert = try Self.from_bytes(der.data);
 
-            return .{ .allocator = allocator, .data = cert, .ref = der.data };
-        }
+        //     return .{ .allocator = allocator, .data = cert, .ref = der.data };
+        // }
 
         pub fn from_bytes(src: []const u8) Error!Self {
             return try Self.from(src);

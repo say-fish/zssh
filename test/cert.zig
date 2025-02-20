@@ -3,7 +3,7 @@ const std = @import("std");
 
 const zssh = @import("zssh");
 
-const Pem = zssh.openssh.cert.Pem;
+const Pem = zssh.openssh.cert.Cert.Pem;
 const Rsa = zssh.openssh.cert.Rsa;
 
 const Cert = zssh.openssh.cert.Cert;
@@ -97,7 +97,7 @@ test "parse ed25519 cert" {
     defer der.deinit();
 
     switch (try Cert.from_bytes(der.data)) {
-        .ed25519 => |cert| {
+        .ed => |cert| {
             try expect_equal(
                 .@"ssh-ed25519-cert-v01@openssh.com",
                 cert.magic.value,
@@ -112,14 +112,14 @@ const Ed25519 = zssh.openssh.cert.Ed25519;
 const enconded_sig_size = zssh.cert.Ed25519.enconded_sig_size;
 
 test enconded_sig_size {
-    var cert = try Ed25519.from_pem(
+    var cert = try Cert.from_pem(
         std.testing.allocator,
         std.base64.standard.Decoder,
         &try Pem.parse(@embedFile("ed25519-cert.pub")),
     );
     defer cert.deinit();
 
-    try expect_equal(352, cert.data.enconded_sig_size());
+    try expect_equal(352, cert.data.ed.enconded_sig_size());
 }
 
 test "verify ed25519 cert" {
@@ -135,7 +135,7 @@ test "verify ed25519 cert" {
     defer der.deinit();
 
     switch (try Cert.from_bytes(der.data)) {
-        .ed25519 => |cert| {
+        .ed => |cert| {
             const signature = Signature.fromBytes(
                 cert.signature.ed.sm[0..64].*,
             );
