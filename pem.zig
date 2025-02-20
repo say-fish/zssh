@@ -5,6 +5,7 @@ const builtin = @import("builtin");
 const meta = @import("meta.zig");
 
 const Error = @import("error.zig").Error;
+
 const ForAll = meta.ForAll;
 const Struct = meta.Struct;
 

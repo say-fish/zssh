@@ -39,14 +39,6 @@ pub fn msg_from_bytes(comptime T: type, src: []const u8) Error!T {
     return msg;
 }
 
-pub const Query = struct {
-    extensions: []const u8,
-
-    pub fn parse(_: []const u8) Error!enc.Cont(Query) {
-        return .{ 0, .{ .extensions = &.{} } };
-    }
-};
-
 // TODO: 3.8.1. Query extension
 pub fn MakeAgent(
     comptime Pk: type,
@@ -92,6 +84,14 @@ pub fn MakeAgent(
         /// Protocl number: SSH_AGENT_EXTENSION_RESPONSE = 29,
         extension_response: Dec(ExtensionResponse) = 29,
 
+        pub const Query = struct {
+            extensions: []const u8,
+
+            pub fn parse(_: []const u8) Error!enc.Cont(Query) {
+                return .{ 0, .{ .extensions = &.{} } };
+            }
+        };
+
         const Self = @This();
 
         pub fn from_bytes(src: []const u8) Error!Self {
@@ -107,7 +107,7 @@ pub fn IdentitiesAnswer(comptime Pk: type) type {
 
         const Self = @This();
 
-        pub const Iterator = enc.GenericIterator(Identity(Pk));
+        pub const Iterator = enc.MakeIterator(Identity(Pk));
 
         pub fn iter(self: *const Self) ?Iterator {
             return if (self.keys) |keys| .{ .ref = keys } else null;
@@ -212,6 +212,11 @@ pub fn MakeClient(
 
         pub const Constraints = MakeConstraints(ConstraintExt);
         pub const Extension = Ext;
+        pub const Query = struct {
+            pub fn parse(_: []const u8) Error!Cont(Query) {
+                return .{ 0, .{} };
+            }
+        };
 
         pub fn from_bytes(src: []const u8) !@This() {
             return try msg_from_bytes(@This(), src);
@@ -346,7 +351,7 @@ pub fn MakeConstraints(comptime Extension: type) type {
         const Self = @This();
 
         pub const Constraint = MakeConstraint(Extension);
-        pub const Iterator = enc.GenericIterator(Constraint);
+        pub const Iterator = enc.MakeIterator(Constraint);
 
         pub fn iter(self: *const Self) Iterator {
             return .{ .ref = self.ref };

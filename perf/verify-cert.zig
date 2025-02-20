@@ -4,8 +4,8 @@ const std = @import("std");
 const zssh = @import("zssh");
 const perf = @import("perf.zig");
 
+const Pem = zssh.openssh.cert.Cert.Pem;
 const Ed25519 = zssh.openssh.cert.Ed25519;
-const Pem = zssh.openssh.cert.Pem;
 const PublicKey = std.crypto.sign.Ed25519.PublicKey;
 const Signature = std.crypto.sign.Ed25519.Signature;
 

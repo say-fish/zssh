@@ -283,18 +283,17 @@ pub inline fn parse_with_cont(
     return .{ i, ret };
 }
 
-pub fn GenericIterator(comptime T: type) type {
+pub fn MakeIterator(comptime T: type) type {
     return struct {
         ref: []const u8,
         off: usize = 0,
 
         const Self = @This();
 
-        pub fn next(self: *Self) !?T {
+        pub fn next(self: *Self) !?Dec(Container(T)) {
             if (self.done()) return null;
 
-            const off, const ret = try Dec(Container(T))
-                .parse(self.ref[self.off..]);
+            const off, const ret = try T.parse(self.ref[self.off..]);
             self.off += off;
 
             return ret;

@@ -762,6 +762,7 @@ pub const private = struct {
             ed: Ed25519,
 
             const Self = @This();
+
             pub const Magic = public.Key.Magic;
 
             // FIXME: Add encode
@@ -911,27 +912,23 @@ pub const agent = struct {
 
     /// OpenSSH's extensions to the agent protocol.
     pub const openssh_extensions = struct {
-        pub const Agent = union(enum) {
-            /// This extension allows a ssh client to bind an agent connection
-            /// to a particular SSH session identifier as derived from the
-            /// initial key exchange (as per RFC4253 section 7.2) and the host
-            /// key used for that exchange. This binding is verifiable at the
-            /// agent by including the initial KEX signature made by the host
-            /// key.
-            @"session-bind@openssh.com": SessionBind,
+        /// This extension allows a ssh client to bind an agent connection
+        /// to a particular SSH session identifier as derived from the
+        /// initial key exchange (as per RFC4253 section 7.2) and the host
+        /// key used for that exchange. This binding is verifiable at the
+        /// agent by including the initial KEX signature made by the host
+        /// key.
+        pub const SessionBind = struct {
+            hostkey: public.Key,
+            identifier: []const u8,
+            signature: signature.Signature,
+            is_forwarding: u8,
 
-            pub const SessionBind = struct {
-                hostkey: public.Key,
-                identifier: []const u8,
-                signature: signature.Signature,
-                is_forwarding: u8,
+            const Self = @This();
 
-                const Self = @This();
-
-                pub fn parse(src: []const u8) Error!Cont(Self) {
-                    return try enc.parse_with_cont(Self, src);
-                }
-            };
+            pub fn parse(src: []const u8) Error!Cont(Self) {
+                return try enc.parse_with_cont(Self, src);
+            }
         };
 
         /// Standard OpenSSH key constraints
@@ -963,16 +960,10 @@ pub const agent = struct {
         };
 
         pub const Extensions = union(enum) {
-            query: gen.Query,
-            @"session-bind@openssh.com": openssh_extensions.Agent.SessionBind,
+            query: Client.Query,
+            @"session-bind@openssh.com": SessionBind,
 
             const Self = @This();
-
-            pub const Query = struct {
-                pub fn parse(_: []const u8) Error!Cont(Query) {
-                    return .{ 0, .{} };
-                }
-            };
 
             pub fn parse(src: []const u8) Error!Cont(Self) {
                 return try gen.decode_as_string(Self, src);
@@ -980,17 +971,9 @@ pub const agent = struct {
         };
 
         pub const ExtensionResponse = union(enum) {
-            query: gen.Query,
+            query: Agent.Query,
 
             const Self = @This();
-
-            pub const Query = struct {
-                extensions: []const u8,
-                // TODO: Iterator.
-                pub fn parse(src: []const u8) Error!Cont(Query) {
-                    return try enc.parse_with_cont(Query, src);
-                }
-            };
 
             pub fn parse(src: []const u8) Error!Cont(Self) {
                 return try gen.decode_as_string(Self, src);

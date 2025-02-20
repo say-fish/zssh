@@ -90,6 +90,7 @@ pub const Critical = struct {
 
     const Self = @This();
 
+    pub const Iterator = enc.MakeIterator(Option);
     pub const Kind = enum {
         /// Specifies a command that is executed (replacing any the user
         /// specified on the ssh command-line) whenever this key is used for
@@ -154,7 +155,6 @@ pub const Critical = struct {
         return enc.encoded_size([]const u8, self.ref);
     }
 
-    pub const Iterator = enc.GenericIterator(Option);
     pub fn iter(self: *const Self) Self.Iterator {
         return .{ .ref = self.ref };
     }
@@ -182,7 +182,7 @@ pub const Extensions = struct {
 
     const Self = @This();
 
-    pub const Iterator = enc.GenericIterator(Kind);
+    pub const Iterator = enc.MakeIterator(Kind);
     pub const Kind = enum(u8) {
         /// Flag indicating that signatures made with this certificate need not
         /// assert FIDO user presence. This option only makes sense for the
@@ -292,7 +292,7 @@ const Principals = struct {
         }
     };
 
-    pub const Iterator = enc.GenericIterator(Principal);
+    pub const Iterator = enc.MakeIterator(Principal);
 
     pub fn iter(self: *const Self) Iterator {
         return .{ .ref = self.ref };
