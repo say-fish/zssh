@@ -22,4 +22,5 @@ pub const Error = error{
     RepeatedExtension,
     UnkownExtension,
     InvalidFileFormat,
+    MsgLenMismatch,
 };

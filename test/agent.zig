@@ -2,8 +2,8 @@
 const std = @import("std");
 const zssh = @import("zssh");
 
-const Agent = zssh.agent.Agent;
-const Client = zssh.agent.Client;
+const Agent = zssh.openssh.agent.Agent;
+const Client = zssh.openssh.agent.Client;
 
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
@@ -63,7 +63,7 @@ test "decode AddIdentity" {
     const msg = try decode(Client, &bytes);
 
     try expect_equal(
-        zssh.agent.Client.add_identity,
+        Client.add_identity,
         std.meta.activeTag(msg),
     );
     try expect_equal(
@@ -324,7 +324,7 @@ test "decode AddIdConstrained" {
         0x6c, 0x68, 0x6f, 0x73, 0x74, 0x01, 0x00, 0x00, 0x00, 0x0a
     }; // zig fmt: on
 
-    const refrences = [_]Client.AddIdConstrained.Constraint{
+    const refrences = [_]Client.Constraints.Constraint{
         .{ .lifetime = .{ .sec = 10 } },
     };
 
@@ -355,7 +355,7 @@ test "decoded AddIdConstrained" {
         0x6c, 0x68, 0x6f, 0x73, 0x74, 0x01, 0x00, 0x00, 0x00, 0x0a, 0x02
     }; // zig fmt: on
 
-    const refrences = [_]Client.AddIdConstrained.Constraint{
+    const refrences = [_]Client.Constraints.Constraint{
         .{ .lifetime = .{ .sec = 10 } },
         .confirm,
     };

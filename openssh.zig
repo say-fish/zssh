@@ -887,3 +887,95 @@ pub const private = struct {
         KeyBlob,
     );
 };
+
+pub const agent = struct {
+    const gen = @import("agent.zig");
+
+    pub const Client = gen.MakeClient(
+        public.Key,
+        private.wire.Key,
+        openssh_extensions.Extensions,
+        openssh_extensions.Constraints,
+    );
+
+    pub const Agent = gen.MakeAgent(
+        public.Key,
+        signature.Signature,
+        openssh_extensions.ExtensionResponse,
+    );
+
+    /// OpenSSH's extensions to the agent protocol.
+    pub const openssh_extensions = struct {
+        pub const Agent = union(enum) {
+            /// This extension allows a ssh client to bind an agent connection
+            /// to a particular SSH session identifier as derived from the
+            /// initial key exchange (as per RFC4253 section 7.2) and the host
+            /// key used for that exchange. This binding is verifiable at the
+            /// agent by including the initial KEX signature made by the host
+            /// key.
+            @"session-bind@openssh.com": SessionBind,
+
+            pub const SessionBind = struct {
+                hostkey: public.Key,
+                identifier: []const u8,
+                signature: signature.Signature,
+                is_forwarding: u8,
+
+                const Self = @This();
+
+                pub fn parse(src: []const u8) Error!enc.Cont(Self) {
+                    return try enc.parse_with_cont(Self, src);
+                }
+            };
+        };
+
+        /// Standard OpenSSH key constraints
+        pub const Constraints = union(enum) {
+            /// This key constraint extension supports destination- and
+            /// forwarding path- restricted keys. It may be attached as a
+            /// constraint when keys or smartcard keys are added to an agent.
+            restrict_destination: RestrictDestination,
+
+            /// This key constraint allows communication to an agent of the
+            /// maximum number of signatures that may be made with an XMSS key.
+            max_signatures: MaxSignatures,
+
+            /// This key constraint extension allows certificates to be
+            /// associated with private keys as they are loaded from a PKCS#11
+            /// token.
+            associated_certs: AssociatedCerts,
+
+            const Self = @This();
+
+            const RestrictDestination = struct {};
+            const MaxSignatures = struct {};
+            const AssociatedCerts = struct {};
+
+            pub fn parse(_: []const u8) Error!enc.Cont(Self) {
+                @panic("TODO:");
+                //return enc.parse(Constraints, src);
+            }
+        };
+
+        pub const Extensions = union(enum) {
+            query: gen.Query,
+            @"session-bind@openssh.com": openssh_extensions.Agent.SessionBind,
+
+            const Self = @This();
+
+            pub fn parse(src: []const u8) Error!enc.Cont(Self) {
+                return try gen.decode_as_string(Self, src);
+            }
+        };
+
+        pub const ExtensionResponse = union(enum) {
+            query: gen.Query,
+
+            const Self = @This();
+
+            pub fn parse(src: []const u8) Error!enc.Cont(Self) {
+                return try gen.decode_as_string(Self, src);
+            }
+        };
+    };
+};

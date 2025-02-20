@@ -46,14 +46,21 @@ pub fn Container(comptime T: type) type {
 
 pub fn Struct(comptime T: type) type {
     if (std.meta.activeTag(@typeInfo(T)) != .@"struct")
-        @compileError(@typeName(T) ++ "is not a struct");
+        @compileError(@typeName(T) ++ " is not a struct");
 
     return T;
 }
 
 pub fn Enum(comptime T: type) type {
     if (std.meta.activeTag(@typeInfo(T)) != .@"enum")
-        @compileError(@typeName(T) ++ "is not an enum");
+        @compileError(@typeName(T) ++ " is not an enum");
+
+    return T;
+}
+
+pub fn Union(comptime T: type) type {
+    if (std.meta.activeTag(@typeInfo(T)) != .@"union")
+        @compileError(@typeName(T) ++ " is not an union");
 
     return T;
 }
