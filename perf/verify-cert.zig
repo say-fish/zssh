@@ -18,7 +18,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
 
     const pem = try Pem.parse(@embedFile("ed25519-cert.pub"));
-    const der = try pem.decode(allocator, std.base64.standard.Decoder);
+    const der = try pem.decode(allocator);
     defer der.deinit();
 
     var timer = try std.time.Timer.start();

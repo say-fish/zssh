@@ -10,6 +10,8 @@ const Cert = zssh.openssh.cert.Cert;
 
 const Error = zssh.openssh.Error;
 
+const Ed25519 = zssh.openssh.cert.Ed25519;
+
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
@@ -31,7 +33,6 @@ fn verify_cert(cert: anytype) !void {
 test "parse Rsa cert" {
     var cert = try Cert.from_pem(
         std.testing.allocator,
-        std.base64.standard.Decoder,
         &try Pem.parse(@embedFile("rsa-cert.pub")),
     );
     defer cert.deinit();
@@ -48,10 +49,7 @@ test "parse Rsa cert" {
 test "parse rsa cert bad cert" {
     const pem = try Pem.parse(@embedFile("rsa-cert.pub"));
 
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    var der = try pem.decode(std.testing.allocator);
     // Save the len so deinit works
     const len = der.data.len;
     defer {
@@ -69,10 +67,7 @@ test "parse rsa cert bad cert" {
 test "parse ecdsa cert" {
     const pem = try Pem.parse(@embedFile("ecdsa-cert.pub"));
 
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     switch (try Cert.from_bytes(der.data)) {
@@ -90,10 +85,7 @@ test "parse ecdsa cert" {
 test "parse ed25519 cert" {
     const pem = try Pem.parse(@embedFile("ed25519-cert.pub"));
 
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     switch (try Cert.from_bytes(der.data)) {
@@ -108,13 +100,9 @@ test "parse ed25519 cert" {
     }
 }
 
-const Ed25519 = zssh.openssh.cert.Ed25519;
-const enconded_sig_size = zssh.cert.Ed25519.enconded_sig_size;
-
-test enconded_sig_size {
+test "encoded size" {
     var cert = try Cert.from_pem(
         std.testing.allocator,
-        std.base64.standard.Decoder,
         &try Pem.parse(@embedFile("ed25519-cert.pub")),
     );
     defer cert.deinit();
@@ -128,10 +116,7 @@ test "verify ed25519 cert" {
 
     const pem = try Pem.parse(@embedFile("ed25519-cert.pub"));
 
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    var der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     switch (try Cert.from_bytes(der.data)) {
@@ -159,11 +144,7 @@ test "extensions iterator" {
     };
 
     const pem = try Pem.parse(@embedFile("rsa-cert.pub"));
-
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     const cert = try Rsa.from_bytes(der.data);
@@ -181,11 +162,7 @@ test "extensions to bitflags" {
     const Kind = zssh.cert.Extensions.Kind;
 
     const pem = try Pem.parse(@embedFile("rsa-cert.pub"));
-
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     const cert = try Rsa.from_bytes(der.data);
@@ -209,11 +186,7 @@ test "multiple valid principals iterator" {
     };
 
     const pem = try Pem.parse(@embedFile("multiple-principals-cert.pub"));
-
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     const cert = try Rsa.from_bytes(der.data);
@@ -237,10 +210,7 @@ test "critical options iterator" {
     }};
 
     const pem = try Pem.parse(@embedFile("force-command-cert.pub"));
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     const cert = try Rsa.from_bytes(der.data);
@@ -273,10 +243,7 @@ test "multiple critical options iterator" {
     const pem = try Pem.parse(
         @embedFile("multiple-critical-options-cert.pub"),
     );
-    var der = try pem.decode(
-        std.testing.allocator,
-        std.base64.standard.Decoder,
-    );
+    const der = try pem.decode(std.testing.allocator);
     defer der.deinit();
 
     const cert = try Rsa.from_bytes(der.data);
@@ -298,7 +265,7 @@ test "parse ed25519 cert with wrong magic string" {
 
     try expect_error(
         Error.InvalidMagicString,
-        Cert.from_pem(std.testing.allocator, std.base64.standard.Decoder, &pem),
+        Cert.from_pem(std.testing.allocator, &pem),
     );
 }
 
@@ -306,11 +273,7 @@ test "fuzz" {
     const Context = struct {
         fn fuzz(_: @This(), input: []const u8) anyerror!void {
             const pem = Pem.parse(input) catch return;
-            const cert = Cert.from_pem(
-                std.testing.allocator,
-                std.base64.standard.Decoder,
-                &pem,
-            ) catch return;
+            const cert = Cert.from_pem(std.testing.allocator, &pem) catch return;
 
             std.debug.print("input: {X}\n", .{input});
             std.debug.print("cert: {any}\n", .{cert});

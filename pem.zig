@@ -11,7 +11,7 @@ const Struct = meta.Struct;
 
 pub fn FromIter(comptime I: type) fn (comptime type) type {
     return struct {
-        fn Curry(comptime T: type) type {
+        fn Inner(comptime T: type) type {
             if (@typeInfo(T) == .@"struct") {
                 const decl_type = fn (*I) Error!T;
 
@@ -22,18 +22,18 @@ pub fn FromIter(comptime I: type) fn (comptime type) type {
 
             @compileError(@typeName(T) ++ " does not satisfy FromIter");
         }
-    }.Curry;
+    }.Inner;
 }
 
 pub fn Tokenize(comptime I: type) fn (comptime type) type {
     return struct {
-        fn Curry(comptime T: type) type {
+        fn Inner(comptime T: type) type {
             const decl_type =
                 fn ([]const u8) callconv(.@"inline") I;
 
             return meta.has_decl(T, "tokenize", decl_type);
         }
-    }.Curry;
+    }.Inner;
 }
 
 pub fn Literal(comptime L: []const u8, comptime I: type) type {

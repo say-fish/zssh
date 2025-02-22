@@ -8,17 +8,19 @@ const meta = @import("meta.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 
-const Error = @import("error.zig").Error;
 const Box = mem.Box;
+
+const From = enc.From;
+
+const Error = @import("error.zig").Error;
+
 const BoxRef = mem.BoxRef;
 const Struct = meta.Struct;
-
-const I = std.mem.TokenIterator(u8, .sequence);
 
 pub fn MakeMagic(comptime T: type) type {
     return magic.MakeMagic(
         T,
-        I,
+        std.mem.TokenIterator(u8, .sequence),
         [:0]const u8,
         enc.parse_null_terminated_str,
         enc.null_terminated_str_encoded_size,
@@ -165,6 +167,7 @@ pub const Cipher = struct {
 pub fn MakePem(
     comptime pre: []const u8,
     comptime pos: []const u8,
+    decoder: anytype,
 ) type {
     return struct {
         pre: pem.Literal(pre, TokenIterator),
@@ -172,7 +175,7 @@ pub fn MakePem(
         suf: pem.Literal(pos, TokenIterator),
 
         const Self = @This();
-        pub const TokenIterator = I;
+        pub const TokenIterator = std.mem.TokenIterator(u8, .sequence);
 
         pub inline fn tokenize(src: []const u8) TokenIterator {
             return std.mem.tokenizeSequence(u8, src, "-----");
@@ -187,7 +190,7 @@ pub fn MakePem(
             allocator: std.mem.Allocator,
         ) !Box([]u8, .sec) {
             const data = try pem
-                .decode_with_ignore(allocator, pem.base64.Decoder, self.der);
+                .decode_with_ignore(allocator, decoder, self.der);
 
             return .{ .allocator = allocator, .data = data };
         }
@@ -281,10 +284,9 @@ pub fn MakeSk(
             return !(std.mem.eql(u8, self.cipher.name, "none") and self.kdf.opt == null);
         }
 
-        pub fn get_public_key(self: *const Self) !Pk {
-            if (!@hasDecl(Pk, "from_bytes"))
-                @compileError("Type `Pub` does not declare `from_bytes([]const u8)`");
-
+        pub fn get_public_key(
+            self: *const Self,
+        ) Error!From("bytes", fn ([]const u8) Error!Pk)(Pk) {
             return Pk.from_bytes(self.public_key_blob);
         }
 

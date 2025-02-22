@@ -5,12 +5,15 @@ const mem = @import("mem.zig");
 
 const meta = @import("meta.zig");
 
-const Error = @import("error.zig").Error;
+const Enum = meta.Enum;
 const Mode = mem.Mode;
-const Container = meta.Container;
+
+const Error = @import("error.zig").Error;
+
 const ForAll = meta.ForAll;
 const Struct = meta.Struct;
-const Enum = meta.Enum;
+
+const Container = meta.Container;
 
 pub fn Dec(comptime T: type) type {
     switch (T) {
@@ -44,8 +47,15 @@ pub fn EncSize(comptime T: type) type {
     }
 }
 
-pub fn From(comptime T: type) type {
-    return T;
+pub fn From(
+    comptime name: []const u8,
+    comptime F: type,
+) fn (comptime type) type {
+    return struct {
+        fn Inner(comptime T: type) T {
+            return meta.has_decl(T, "from_" ++ name, F);
+        }
+    }.Inner;
 }
 
 pub fn Ser(comptime T: type) type {

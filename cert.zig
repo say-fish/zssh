@@ -35,7 +35,7 @@ pub fn MakeMagic(comptime T: type) type {
     );
 }
 
-pub fn MakePem(comptime Magic: type) type {
+pub fn MakePem(comptime Magic: type, decoder: anytype) type {
     return struct {
         magic: Magic,
         der: []const u8,
@@ -55,7 +55,6 @@ pub fn MakePem(comptime Magic: type) type {
         pub fn decode(
             self: *const Self,
             allocator: std.mem.Allocator,
-            decoder: std.base64.Base64Decoder,
         ) Error!Box([]u8, .plain) {
             const data = try pem.decode(allocator, decoder, self.der);
 

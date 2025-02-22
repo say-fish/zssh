@@ -118,7 +118,7 @@ pub const cert = struct {
 
         const Self = @This();
 
-        pub const Pem = gen.MakePem(Magic);
+        pub const Pem = gen.MakePem(Magic, std.base64.standard.Decoder);
 
         fn from(magic: Magic.Value, src: []const u8) !Self {
             return switch (magic) {
@@ -143,10 +143,9 @@ pub const cert = struct {
 
         pub fn from_pem(
             allocator: std.mem.Allocator,
-            decoder: std.base64.Base64Decoder,
             pem: *const Pem,
         ) Error!BoxRef(Self, .plain) {
-            var der = try pem.decode(allocator, decoder);
+            var der = try pem.decode(allocator);
             errdefer der.deinit();
 
             const cer = try Self.from(pem.magic.value, der.data);
@@ -324,7 +323,7 @@ pub const public = struct {
 
         const Self = @This();
 
-        pub const Pem = gen.Pem(Magic);
+        pub const Pem = gen.MakePem(Magic, std.base64.standard.Decoder);
         pub const Magic = gen.MakeMagic(enum {
             @"ssh-rsa",
             @"ecdsa-sha2-nistp256",
@@ -354,7 +353,7 @@ pub const public = struct {
             };
         }
 
-        pub fn from_bytes(src: []const u8) !Self {
+        pub fn from_bytes(src: []const u8) Error!Self {
             return Self.from((try Magic.from_bytes(src)).value, src);
         }
 
@@ -427,7 +426,7 @@ pub const signature = struct {
 
         const Self = @This();
 
-        const Magic = gen.Magic(enum(u1) {
+        const Magic = gen.MakeMagic(enum(u1) {
             @"rsa-sha2-256",
             @"rsa-sha2-512",
         });
@@ -478,7 +477,7 @@ pub const signature = struct {
 
         const Self = @This();
 
-        const Magic = gen.Magic(enum {
+        const Magic = gen.MakeMagic(enum {
             @"ecdsa-sha2-nistp256",
             @"ecdsa-sha2-nistp512",
         });
@@ -503,7 +502,7 @@ pub const signature = struct {
 
         const Self = @This();
 
-        pub const Magic = gen.Magic(enum(u1) { @"ssh-ed25519" });
+        pub const Magic = gen.MakeMagic(enum(u1) { @"ssh-ed25519" });
 
         fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);
@@ -523,7 +522,7 @@ pub const signature = struct {
 
         const Self = @This();
 
-        pub const Magic = gen.Magic(enum {
+        pub const Magic = gen.MakeMagic(enum {
             @"rsa-sha2-256",
             @"rsa-sha2-512",
             @"ecdsa-sha2-nistp256",
@@ -562,7 +561,6 @@ pub const signature = struct {
         /// Verifiers MUST reject signatures with versions greater than those
         /// they support.
         version: u32,
-        /// See: `zssh.pk.Pk`
         publickey: public.Key,
         /// The purpose of the namespace value is to specify a unambiguous
         /// interpretation domain for the signature, e.g. file signing. This
@@ -582,9 +580,13 @@ pub const signature = struct {
 
         const Self = @This();
 
-        pub const Pem = gen.Pem("BEGIN SSH SIGNATURE", "END SSH SIGNATURE");
-        pub const Preamble = gen.Preamble(enum { SSHSIG });
-        pub const HashAlgorithm = gen.Magic(enum { sha256, sha512 });
+        pub const Pem = gen.MakePem(
+            "BEGIN SSH SIGNATURE",
+            "END SSH SIGNATURE",
+            @import("pem.zig").base64.Decoder,
+        );
+        pub const Preamble = gen.MakePreamble(enum { SSHSIG });
+        pub const HashAlgorithm = gen.MakeMagic(enum { sha256, sha512 });
 
         pub fn parse(src: []const u8) Error!Cont(Self) {
             return try enc.parse_with_cont(Self, src);
@@ -888,7 +890,11 @@ pub const private = struct {
 
     pub const Key = gen.MakeSk(
         gen.MakeMagic(enum { @"openssh-key-v1" }),
-        gen.MakePem("BEGIN OPENSSH PRIVATE KEY", "END OPENSSH PRIVATE KEY"),
+        gen.MakePem(
+            "BEGIN OPENSSH PRIVATE KEY",
+            "END OPENSSH PRIVATE KEY",
+            @import("pem.zig").base64.Decoder,
+        ),
         public.Key,
         KeyBlob,
     );
