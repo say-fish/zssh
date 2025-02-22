@@ -84,3 +84,19 @@ test "encode Ed25519" {
 
     try expect_equal_slices(u8, key.ref, encoded.data);
 }
+
+test "fuzz public key" {
+    const Context = struct {
+        fn fuzz(_: @This(), input: []const u8) anyerror!void {
+            const pem = Pem.parse(input) catch return;
+            const key = Key.from_pem(std.testing.allocator, pem) catch return;
+
+            std.debug.print("key: {any}\n", .{key});
+            std.debug.print("input: {X}\n", .{input});
+
+            @panic("fuzz passed!!!");
+        }
+    };
+
+    try std.testing.fuzz(Context{}, Context.fuzz, .{});
+}

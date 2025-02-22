@@ -302,4 +302,24 @@ test "parse ed25519 cert with wrong magic string" {
     );
 }
 
+test "fuzz" {
+    const Context = struct {
+        fn fuzz(_: @This(), input: []const u8) anyerror!void {
+            const pem = Pem.parse(input) catch return;
+            const cert = Cert.from_pem(
+                std.testing.allocator,
+                std.base64.standard.Decoder,
+                &pem,
+            ) catch return;
+
+            std.debug.print("input: {X}\n", .{input});
+            std.debug.print("cert: {any}\n", .{cert});
+
+            @panic("fuzz passed!!!");
+        }
+    };
+
+    try std.testing.fuzz(Context{}, Context.fuzz, .{});
+}
+
 // TODO: Add tets for other certs types

@@ -64,3 +64,22 @@ test "parse and verify SshSig" {
         }
     }
 }
+
+test "fuzz" {
+    const Context = struct {
+        fn fuzz(_: @This(), input: []const u8) anyerror!void {
+            const pem = SshSig.Pem.parse(input) catch return;
+            const key = SshSig.from_pem(
+                std.testing.allocator,
+                &pem,
+            ) catch return;
+
+            std.debug.print("key: {any}\n", .{key});
+            std.debug.print("input: {X}\n", .{input});
+
+            @panic("fuzz passed!!!");
+        }
+    };
+
+    try std.testing.fuzz(Context{}, Context.fuzz, .{});
+}

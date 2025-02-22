@@ -370,3 +370,37 @@ test "decoded AddIdConstrained" {
 
     try expect(it.done());
 }
+
+test "fuzz Client" {
+    const Context = struct {
+        fn fuzz(_: @This(), input: []const u8) anyerror!void {
+            if (input.len < 4) return;
+
+            const msg = decode(Client, input) catch return;
+
+            std.debug.print("input: {X}\n", .{input});
+            std.debug.print("msg: {any}\n", .{msg});
+
+            @panic("fuzz passed!!!");
+        }
+    };
+
+    try std.testing.fuzz(Context{}, Context.fuzz, .{});
+}
+
+test "fuzz Agent" {
+    const Context = struct {
+        fn fuzz(_: @This(), input: []const u8) anyerror!void {
+            if (input.len < 4) return;
+
+            const msg = decode(Agent, input) catch return;
+
+            std.debug.print("input: {X}\n", .{input});
+            std.debug.print("msg: {any}\n", .{msg});
+
+            @panic("fuzz passed!!!");
+        }
+    };
+
+    try std.testing.fuzz(Context{}, Context.fuzz, .{});
+}
