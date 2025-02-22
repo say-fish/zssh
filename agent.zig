@@ -17,10 +17,13 @@ const sig = @import("sig.zig");
 const meta = @import("meta.zig");
 
 const Dec = enc.Dec;
+
 const Cont = enc.Cont;
-const Union = meta.Union;
 
 const Error = @import("error.zig").Error;
+const Union = meta.Union;
+
+const ForAll = meta.ForAll;
 
 pub fn msg_from_bytes(comptime T: type, src: []const u8) Error!T {
     if (src.len < @sizeOf(u32))
@@ -318,6 +321,7 @@ pub fn MakeConstraint(comptime Extension: type) type {
     return union(enum(u8)) {
         lifetime: Lifetime = 1,
         confirm: Confirm = 2,
+        max_signatures: MaxSignatures = 3,
         extension: Union(Extension) = 255,
 
         const Self = @This();
@@ -335,6 +339,16 @@ pub fn MakeConstraint(comptime Extension: type) type {
                 std.debug.assert(src.len == 0);
 
                 return .{ 0, .{} };
+            }
+        };
+
+        /// This key constraint allows communication to an agent of the
+        /// maximum number of signatures that may be made with an XMSS key.
+        pub const MaxSignatures = struct {
+            max: u32,
+
+            pub fn parse(src: []const u8) Error!Cont(MaxSignatures) {
+                return try enc.parse_with_cont(MaxSignatures, src);
             }
         };
 
@@ -407,8 +421,10 @@ pub fn decode_as_string(comptime T: type, src: []const u8) Error!enc.Cont(T) {
 
     inline for (comptime std.meta.fields(T)) |field| {
         if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
-            const final, const msg = if (comptime field.type != void) field.type.parse(src[next..]) catch
-                return error.InvalidData else .{ 0, {} };
+            const final, const msg = if (comptime field.type != void)
+                try field.type.parse(src[next..])
+            else
+                .{ 0, {} };
 
             return .{ next + final, @unionInit(T, field.name, msg) };
         }
@@ -421,10 +437,8 @@ pub fn decode_as_string(comptime T: type, src: []const u8) Error!enc.Cont(T) {
 }
 
 // TODO: Move this to enc (with a decode tag)
-pub fn decode(comptime T: type, src: []const u8) Error!enc.Cont(T) {
+pub fn decode(comptime T: type, src: []const u8) Error!Cont(ForAll(Dec, T)) {
     const Tag = comptime std.meta.Tag(T);
-
-    // @compileLog(Tag);
 
     const next, const kind = try enc.rfc4251.parse_int(u8, src);
 
@@ -435,8 +449,10 @@ pub fn decode(comptime T: type, src: []const u8) Error!enc.Cont(T) {
 
     inline for (comptime std.meta.fields(T)) |field| {
         if (e == comptime std.meta.stringToEnum(Tag, field.name).?) {
-            const final, const msg = if (comptime field.type != void) field.type.parse(src[next..]) catch
-                return error.InvalidData else .{ 0, {} };
+            const final, const msg = if (comptime field.type != void)
+                try field.type.parse(src[next..])
+            else
+                .{ 0, {} };
 
             return .{ next + final, @unionInit(T, field.name, msg) };
         }

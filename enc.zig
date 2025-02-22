@@ -17,7 +17,16 @@ const Container = meta.Container;
 
 pub fn Dec(comptime T: type) type {
     switch (T) {
-        u8, u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
+        void, // For unit structs
+        bool,
+        u8,
+        u32,
+        u64,
+        []u8,
+        []const u8,
+        [:0]u8,
+        [:0]const u8,
+        => return T,
 
         else => switch (@typeInfo(T)) {
             .@"struct", .@"enum", .@"union" => {
@@ -33,7 +42,15 @@ pub fn Dec(comptime T: type) type {
 
 pub fn EncSize(comptime T: type) type {
     switch (T) {
-        u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
+        void, // For unit structs
+        bool,
+        u32,
+        u64,
+        []u8,
+        []const u8,
+        [:0]u8,
+        [:0]const u8,
+        => return T,
 
         else => switch (@typeInfo(T)) {
             .@"struct", .@"enum", .@"union" => {
@@ -60,7 +77,15 @@ pub fn From(
 
 pub fn Ser(comptime T: type) type {
     switch (T) {
-        u32, u64, []u8, []const u8, [:0]u8, [:0]const u8 => return T,
+        void, // For unit structs
+        bool,
+        u32,
+        u64,
+        []u8,
+        []const u8,
+        [:0]u8,
+        [:0]const u8,
+        => return T,
 
         else => switch (@typeInfo(T)) {
             .@"struct", .@"enum", .@"union" => {
@@ -86,6 +111,12 @@ pub const rfc4251 = struct {
         // implementation explicitly does not do this, on x86_64 this gets
         // compiled to `movbe`...
         return std.mem.readVarInt(T, buf[0..@sizeOf(T)], std.builtin.Endian.big);
+    }
+
+    pub inline fn parse_bool(src: []const u8) Error!Cont(bool) {
+        const next, const value = try parse_int(u8, src);
+
+        return .{ next, value != 0 };
     }
 
     /// Parse a RFC-4251 encoded int
@@ -276,9 +307,11 @@ pub inline fn parse_with_cont(
         const ref = src[i..];
 
         const next, const val = switch (comptime field.type) {
-            []const u8 => try rfc4251.parse_string(ref),
+            bool => try rfc4251.parse_bool(ref),
 
             u8, u32, u64 => |U| try rfc4251.parse_int(U, ref),
+
+            []const u8 => try rfc4251.parse_string(ref),
 
             else => try field.type.parse(ref),
         };

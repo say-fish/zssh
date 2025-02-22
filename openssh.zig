@@ -942,26 +942,48 @@ pub const agent = struct {
             /// This key constraint extension supports destination- and
             /// forwarding path- restricted keys. It may be attached as a
             /// constraint when keys or smartcard keys are added to an agent.
-            restrict_destination: RestrictDestination,
-
-            /// This key constraint allows communication to an agent of the
-            /// maximum number of signatures that may be made with an XMSS key.
-            max_signatures: MaxSignatures,
+            @"restrict-destination-v00@openssh.com": RestrictDestination,
 
             /// This key constraint extension allows certificates to be
             /// associated with private keys as they are loaded from a PKCS#11
             /// token.
-            associated_certs: AssociatedCerts,
+            @"associated-certs-v00@openssh.com": AssociatedCerts,
 
             const Self = @This();
 
-            const RestrictDestination = struct {};
-            const MaxSignatures = struct {};
-            const AssociatedCerts = struct {};
+            const RestrictDestination = struct {
+                constraints: []const u8,
+                // TODO TYPE:
+                //      string          from_username (must be empty)
+                //      string          from_hostname
+                //      string          reserved
+                //      keyspec[]       from_hostkeys
+                //      string          to_username
+                //      string          to_hostname
+                //      string          reserved
+                //      keyspec[]       to_hostkeys
+                //      string          reserved
+                //
+                // And a keyspec consists of:
+                //
+                //      string          keyblob
+                //      bool            is_ca
+                pub fn parse(src: []const u8) Error!Cont(RestrictDestination) {
+                    return try enc.parse_with_cont(RestrictDestination, src);
+                }
+            };
 
-            pub fn parse(_: []const u8) Error!Cont(Self) {
-                @panic("TODO:");
-                //return enc.parse(Constraints, src);
+            const AssociatedCerts = struct {
+                certs_only: bool,
+                cert_blob: []const u8, // TODO: Iterator
+
+                pub fn parse(src: []const u8) Error!Cont(AssociatedCerts) {
+                    return try enc.parse_with_cont(AssociatedCerts, src);
+                }
+            };
+
+            pub fn parse(src: []const u8) Error!Cont(Self) {
+                return try gen.decode_as_string(Self, src);
             }
         };
 
