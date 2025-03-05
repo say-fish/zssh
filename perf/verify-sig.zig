@@ -1,22 +1,36 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
+const builtin = @import("builtin");
 
-const zssh = @import("zssh");
 const perf = @import("perf.zig");
+const zssh = @import("zssh");
 
 const Pem = zssh.openssh.signature.SshSig.Pem;
-const PublicKey = std.crypto.sign.Ed25519.PublicKey;
+
 const Sha512 = std.crypto.hash.sha2.Sha512;
-const Signature = std.crypto.sign.Ed25519.Signature;
 const SshSig = zssh.openssh.signature.SshSig;
+
+const PublicKey = std.crypto.sign.Ed25519.PublicKey;
+const Signature = std.crypto.sign.Ed25519.Signature;
+
+const DebugAllocator = std.heap.DebugAllocator(.{});
 
 const MAX_RUNS: usize = 0x01 << 16;
 
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer if (gpa.deinit() == .leak) @panic("LEAK");
-
-    const allocator = gpa.allocator();
+    const allocator, var is_dba: ?DebugAllocator = gpa: {
+        if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, null };
+        break :gpa switch (builtin.mode) {
+            .Debug, .ReleaseSafe => {
+                var dba: DebugAllocator = .init;
+                break :gpa .{ dba.allocator(), dba };
+            },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, null },
+        };
+    };
+    defer if (is_dba) |*debug_allocator| {
+        if (debug_allocator.deinit() == .leak) @panic("LEAK");
+    };
 
     const pem = try Pem.parse(@embedFile("test.file.sig"));
     const der = try pem.decode(allocator);

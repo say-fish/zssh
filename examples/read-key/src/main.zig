@@ -1,14 +1,28 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 const openssh = @import("zssh").openssh;
 
+const DebugAllocator = std.heap.DebugAllocator(.{});
+
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer if (gpa.deinit() == .leak) @panic("MEMORY LEAK");
+    const allocator, var is_dba: ?DebugAllocator = gpa: {
+        if (builtin.os.tag == .wasi) break :gpa .{ std.heap.wasm_allocator, null };
+        break :gpa switch (builtin.mode) {
+            .Debug, .ReleaseSafe => {
+                var dba: DebugAllocator = .init;
+                break :gpa .{ dba.allocator(), dba };
+            },
+            .ReleaseFast, .ReleaseSmall => .{ std.heap.smp_allocator, null },
+        };
+    };
+    defer if (is_dba) |*debug_allocator| {
+        if (debug_allocator.deinit() == .leak) @panic("LEAK");
+    };
 
     const stdout = std.io.getStdOut().writer();
 
-    var args = try std.process.ArgIterator.initWithAllocator(gpa.allocator());
+    var args = try std.process.ArgIterator.initWithAllocator(allocator);
     defer args.deinit();
 
     _ = args.next();
@@ -18,13 +32,13 @@ pub fn main() !void {
     var file = try std.fs.cwd().openFile(file_name, .{});
     defer file.close();
 
-    const contents = try file.readToEndAlloc(gpa.allocator(), 1024 * 1024);
-    defer gpa.allocator().free(contents);
+    const contents = try file.readToEndAlloc(allocator, 1024 * 1024);
+    defer allocator.free(contents);
 
     if (std.mem.endsWith(u8, file_name, ".pub")) {
         const pem = try openssh.public.Key.Pem.parse(contents);
 
-        const key = try openssh.public.Key.from_pem(gpa.allocator(), pem);
+        const key = try openssh.public.Key.from_pem(allocator, pem);
         defer key.deinit();
 
         try stdout.print("{s}\n", .{file_name});
@@ -34,7 +48,7 @@ pub fn main() !void {
     } else {
         const pem = try openssh.private.Key.Pem.parse(contents);
 
-        const key = try openssh.private.Key.from_pem(gpa.allocator(), pem);
+        const key = try openssh.private.Key.from_pem(allocator, pem);
         defer key.deinit();
 
         try stdout.print("{s}\n", .{file_name});
