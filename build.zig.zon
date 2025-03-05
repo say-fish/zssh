@@ -1,6 +1,7 @@
 .{
-    .name = "zssh",
+    .name = .zssh,
     .version = "0.0.1",
+    .fingerprint = 0x340a8ab20b86df73,
     .minimum_zig_version = "0.14.0",
     .dependencies = .{},
     .paths = .{

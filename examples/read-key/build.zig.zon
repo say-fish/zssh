@@ -1,6 +1,7 @@
 .{
-    .name = "read-key",
+    .name = .read_key,
     .version = "0.0.0",
+    .fingerprint = 0x1b7c4afb930ada9e,
     .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .zssh = .{
