@@ -16,6 +16,7 @@ const sig = @import("sig.zig");
 
 const meta = @import("meta.zig");
 
+const EncSize = enc.EncSize;
 const Dec = enc.Dec;
 
 const Cont = enc.Cont;
@@ -24,6 +25,16 @@ const Error = @import("error.zig").Error;
 const Union = meta.Union;
 
 const ForAll = meta.ForAll;
+
+fn static_encode(comptime T: type, comptime value: EncSize(T)) [value.encoded_size()]u8 {
+    var arr = comptime std.BoundedArray(u8, value.encoded_size()).init(0) catch |err|
+        @compileError(@errorName(err));
+
+    value.serialize(arr.writer().any()) catch |err|
+        @compileError(@errorName(err));
+
+    return arr.buffer;
+}
 
 pub fn msg_from_bytes(comptime T: type, src: []const u8) Error!T {
     if (src.len < @sizeOf(u32))
@@ -64,7 +75,7 @@ pub fn MakeAgent(
         /// The agent shall reply with IdentitiesAnswer for RequestIdentities
         ///
         /// Protocol number: SSH_AGENT_IDENTITIES_ANSWER = 12,
-        identities_answer: IdentitiesAnswer(Pk) = 12,
+        identities_answer: IdentitiesAnswer = 12,
 
         /// The signature format is specific to the algorithm of the key type in
         /// use. SSH protocol signature formats are defined in sig.Rrf4253 for
@@ -97,18 +108,45 @@ pub fn MakeAgent(
 
         const Self = @This();
 
+        pub const IdentitiesAnswer = MakeIdentitiesAnswer(Pk);
+
+        pub const empty_identities_answer_encoded = static_encode(Self, .init(.identities_answer, .empty));
+
+        pub fn init(
+            tag: std.meta.Tag(Self),
+            value: std.meta.TagPayload(Self, tag),
+        ) Self {
+            return @unionInit(Self, @tagName(tag), value);
+        }
+
         pub fn from_bytes(src: []const u8) Error!Self {
             return try msg_from_bytes(Self, src);
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_union(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return switch (self.*) {
+                inline else => |e| enc.encoded_size(@TypeOf(e), e),
+            } + @sizeOf(u32) + @sizeOf(u8);
         }
     };
 }
 
-pub fn IdentitiesAnswer(comptime Pk: type) type {
+pub fn MakeIdentitiesAnswer(comptime Pk: type) type {
     return struct {
         nkeys: u32,
         keys: ?[]const u8,
 
         const Self = @This();
+
+        pub const empty: Self = .{ .nkeys = 0, .keys = null };
+        pub const empty_encoded: []const u8 = &static_encode(Self, .empty);
 
         pub const Iterator = enc.MakeIterator(Identity(Pk));
 
@@ -125,6 +163,17 @@ pub fn IdentitiesAnswer(comptime Pk: type) type {
                 .keys = if (nkeys != 0) src[next..] else null,
             } };
         }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(Self, self);
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
+        }
     };
 }
 
@@ -136,6 +185,18 @@ pub fn SignResponse(comptime Sig: type) type {
 
         pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn encoded_size(_: *const Self) u32 {
+            @panic("TODO");
+        }
+
+        pub fn serialize(
+            _: *const Self,
+            _: std.io.AnyWriter,
+        ) anyerror!void {
+            @panic("TODO");
+            //try enc.serialize_struct(Self, writer, self);
         }
     };
 }
@@ -223,6 +284,11 @@ pub fn MakeClient(
 
         pub fn from_bytes(src: []const u8) !@This() {
             return try msg_from_bytes(@This(), src);
+        }
+
+        pub fn from_slice(src: []const u8) !@This() {
+            _, const msg = try decode(@This(), src);
+            return msg;
         }
     };
 }

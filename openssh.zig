@@ -7,9 +7,9 @@ pub const Box = mem.Box;
 
 pub const Cont = enc.Cont;
 
-pub const BoxRef = mem.BoxRef;
-
 pub const Error = @import("error.zig").Error;
+
+pub const BoxRef = mem.BoxRef;
 
 pub const cert = struct {
     const gen = @import("cert.zig");
@@ -985,6 +985,17 @@ pub const agent = struct {
             pub fn parse(src: []const u8) Error!Cont(Self) {
                 return try gen.decode_as_string(Self, src);
             }
+
+            pub fn encoded_size(_: *const Self) u32 {
+                @panic("TODO");
+            }
+
+            pub fn serialize(
+                _: *const Self,
+                _: std.io.AnyWriter,
+            ) anyerror!void {
+                @panic("TODO");
+            }
         };
 
         pub const Extensions = union(enum) {
@@ -996,6 +1007,17 @@ pub const agent = struct {
             pub fn parse(src: []const u8) Error!Cont(Self) {
                 return try gen.decode_as_string(Self, src);
             }
+
+            pub fn encoded_size(_: *const Self) u32 {
+                @panic("TODO");
+            }
+
+            pub fn serialize(
+                _: *const Self,
+                _: std.io.AnyWriter,
+            ) anyerror!void {
+                @panic("TODO");
+            }
         };
 
         pub const ExtensionResponse = union(enum) {
@@ -1005,6 +1027,17 @@ pub const agent = struct {
 
             pub fn parse(src: []const u8) Error!Cont(Self) {
                 return try gen.decode_as_string(Self, src);
+            }
+
+            pub fn encoded_size(_: *const Self) u32 {
+                @panic("TODO");
+            }
+
+            pub fn serialize(
+                _: *const Self,
+                _: std.io.AnyWriter,
+            ) anyerror!void {
+                @panic("TODO");
             }
         };
     };

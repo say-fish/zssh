@@ -9,6 +9,7 @@ const Enum = meta.Enum;
 const Mode = mem.Mode;
 
 const Error = @import("error.zig").Error;
+const Union = meta.Union;
 
 const ForAll = meta.ForAll;
 const Struct = meta.Struct;
@@ -41,6 +42,7 @@ pub fn Dec(comptime T: type) type {
 }
 
 pub fn EncSize(comptime T: type) type {
+    @setEvalBranchQuota(2000);
     switch (T) {
         void, // For unit structs
         bool,
@@ -48,6 +50,7 @@ pub fn EncSize(comptime T: type) type {
         u64,
         []u8,
         []const u8,
+        ?[]const u8,
         [:0]u8,
         [:0]const u8,
         => return T,
@@ -83,6 +86,7 @@ pub fn Ser(comptime T: type) type {
         u64,
         []u8,
         []const u8,
+        ?[]const u8,
         [:0]u8,
         [:0]const u8,
         => return T,
@@ -206,11 +210,20 @@ pub fn serialize_any(
     value: Ser(T),
 ) anyerror!void {
     switch (comptime T) {
+        void => return,
+
         u32, u64 => _ = try writer.writeInt(T, value, .big),
 
         []u8, []const u8 => {
             _ = try writer.writeInt(u32, @intCast(value.len), .big);
             _ = try writer.writeAll(value);
+        },
+
+        ?[]const u8 => if (value) |v| {
+            _ = try writer.writeInt(u32, @intCast(v.len), .big);
+            _ = try writer.writeAll(v);
+        } else {
+            _ = try writer.writeInt(u8, 0, .big);
         },
 
         [:0]u8, [:0]const u8 => {
@@ -219,7 +232,7 @@ pub fn serialize_any(
         },
 
         else => switch (comptime @typeInfo(T)) {
-            .@"struct", .@"enum" => try value.serialize(writer),
+            .@"struct", .@"enum", .@"union" => try value.serialize(writer),
 
             // This is a special case for fixed size encoded strings
             .array => _ = try writer.writeAll(&value),
@@ -247,9 +260,13 @@ pub fn encode_value(
 
 pub fn encoded_size(comptime T: type, value: EncSize(T)) u32 {
     return switch (@TypeOf(value)) {
+        void => 0,
+
         u32, u64, []u8, []const u8 => rfc4251.encoded_size(value),
 
         [:0]u8, [:0]const u8 => null_terminated_str_encoded_size(value),
+
+        ?[]const u8 => if (value) |v| rfc4251.encoded_size(v) else 1,
 
         else => |Type| switch (@typeInfo(Type)) {
             .@"enum", .@"struct", .@"union" => value.encoded_size(),
@@ -281,6 +298,22 @@ pub fn serialize_struct(
 ) !void {
     inline for (comptime std.meta.fields(T)) |f| {
         try serialize_any(f.type, writer, @field(value, f.name));
+    }
+}
+
+pub fn serialize_union(
+    comptime T: type,
+    writer: std.io.AnyWriter,
+    value: *const ForAll(Ser, Union(EncSize(T))),
+) !void {
+    // FIXME: write tags that are strings.
+    switch (value.*) {
+        inline else => |e| {
+            try writer.writeInt(u32, encoded_size(@TypeOf(e), e), .big);
+            try writer.writeInt(u8, @intFromEnum(std.meta.activeTag(value.*)), .big);
+
+            try serialize_any(@TypeOf(e), writer, e);
+        },
     }
 }
 
