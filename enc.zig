@@ -306,10 +306,16 @@ pub fn serialize_union(
     writer: std.io.AnyWriter,
     value: *const ForAll(Ser, Union(EncSize(T))),
 ) !void {
-    // FIXME: write tags that are strings.
+    const encoded_size_msg = value.encoded_size();
+
+    std.debug.assert(encoded_size_msg > @sizeOf(u32));
+    // The encoded size will be the full encoded size of the message, we need
+    // to subtract the msg len field size
+    const encoded_size_content: u32 = encoded_size_msg - @sizeOf(u32);
+
     switch (value.*) {
         inline else => |e| {
-            try writer.writeInt(u32, encoded_size(@TypeOf(e), e), .big);
+            try writer.writeInt(u32, encoded_size_content, .big);
             try writer.writeInt(u8, @intFromEnum(std.meta.activeTag(value.*)), .big);
 
             try serialize_any(@TypeOf(e), writer, e);

@@ -554,6 +554,7 @@ test "serialize Agent.success" {
 
     try msg.serialize(arr.writer().any());
 
+    try expect_equal(5, msg.encoded_size());
     try expect_equal_strings(&[_]u8{ 0x00, 0x00, 0x00, 0x01, 0x06 }, arr.items);
 }
 
@@ -565,5 +566,6 @@ test "serialize Agent.extension_failure" {
 
     try msg.serialize(arr.writer().any());
 
+    try expect_equal(5, msg.encoded_size());
     try expect_equal_strings(&[_]u8{ 0x00, 0x00, 0x00, 0x01, 0x1C }, arr.items);
 }

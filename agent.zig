@@ -98,6 +98,17 @@ pub fn MakeAgent(
         /// Protocl number: SSH_AGENT_EXTENSION_RESPONSE = 29,
         extension_response: Dec(ExtensionResponse) = 29,
 
+        const Self = @This();
+
+        pub const failure_encoded = static_encode(Self, .init(.failure, {}));
+        pub const success_encoded = static_encode(Self, .init(.success, {}));
+        pub const empty_identities_answer_encoded =
+            static_encode(Self, .init(.identities_answer, .empty));
+        pub const extension_failure_encoded =
+            static_encode(Self, .init(.extension_failure, {}));
+
+        pub const IdentitiesAnswer = MakeIdentitiesAnswer(Pk);
+
         pub const Query = struct {
             extensions: []const u8,
 
@@ -105,12 +116,6 @@ pub fn MakeAgent(
                 return .{ 0, .{ .extensions = &.{} } };
             }
         };
-
-        const Self = @This();
-
-        pub const IdentitiesAnswer = MakeIdentitiesAnswer(Pk);
-
-        pub const empty_identities_answer_encoded = static_encode(Self, .init(.identities_answer, .empty));
 
         pub fn init(
             tag: std.meta.Tag(Self),
@@ -133,7 +138,7 @@ pub fn MakeAgent(
         pub fn encoded_size(self: *const Self) u32 {
             return switch (self.*) {
                 inline else => |e| enc.encoded_size(@TypeOf(e), e),
-            } + @sizeOf(u32) + @sizeOf(u8);
+            } + @sizeOf(u32) + @sizeOf(u8); // FIXME: Get the tag size since the tag could be encoded as a string
         }
     };
 }
