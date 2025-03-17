@@ -4,10 +4,11 @@ const builtin = @import("builtin");
 
 const meta = @import("meta.zig");
 
+const Is = meta.Is;
+
 const Error = @import("error.zig").Error;
 
 const ForAll = meta.ForAll;
-const Struct = meta.Struct;
 
 pub fn FromIter(comptime I: type) fn (comptime type) type {
     return struct {
@@ -76,13 +77,13 @@ pub fn parse(
     comptime T: type,
     comptime I: type,
     src: []const u8,
-) Error!ForAll(FromIter(I), Tokenize(I)(Struct(T))) {
+) Error!ForAll(FromIter(I), Tokenize(I)(Is(.@"struct", T))) {
     var it = T.tokenize(src);
 
     var ret: T = undefined;
 
     inline for (comptime std.meta.fields(T)) |field| {
-        if (comptime meta.is_struct(field.type)) {
+        if (comptime meta.is(.@"struct", field.type)) {
             @field(ret, field.name) = try field.type.from_iter(&it);
 
             continue;

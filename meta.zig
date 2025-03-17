@@ -1,8 +1,24 @@
 //! Type classes *ALIKE* for Zig. This provides facilities for explicit compile
-//! time type "interfaces".
+//! time type "interfaces". This avoids convoluted checks with `@hasDecl` and
+//! alike. While making debugging a little bit easier, since now the type
+//! requirements are explicit in the function declaration or use site.
+//!
+//! For this to work with Zig, the type must be threaded through a function that
+//! checks the type constraints, i.e.
+//!
+//! ```zig
+//!
+//! fn foo(comptime T: type, value: And(T, .{Decl("foo"), Decl("bar")})) void {
+//!     // Here, we are sure that `value: T` has the fields `fod` and `bar`
+//!     // access
+//! }
+//! ```
 
 const std = @import("std");
 
+/// Checks if a given predicate `pred` is valid for all instances in type T,
+/// for structs, enums, and unions this means checking all fields in the type
+/// match the predicate.
 pub fn ForAll(pred: fn (comptime type) type, comptime T: type) type {
     switch (@typeInfo(T)) {
         .@"struct", .@"enum", .@"union" => {
@@ -44,32 +60,22 @@ pub fn Container(comptime T: type) type {
     };
 }
 
-pub fn Struct(comptime T: type) type {
-    if (std.meta.activeTag(@typeInfo(T)) != .@"struct")
-        @compileError(@typeName(T) ++ " is not a struct");
-
-    return T;
-}
-
-pub fn Enum(comptime T: type) type {
-    if (std.meta.activeTag(@typeInfo(T)) != .@"enum")
-        @compileError(@typeName(T) ++ " is not an enum");
-
-    return T;
-}
-
-pub fn Union(comptime T: type) type {
-    if (std.meta.activeTag(@typeInfo(T)) != .@"union")
-        @compileError(@typeName(T) ++ " is not an union");
-
-    return T;
-}
-
 pub fn member(comptime T: type, comptime name: []const u8) type {
     if (!@hasDecl(T, name))
         @compileError(@typeName(T) ++ " has no declaration named " ++ name);
 
     return @field(T, name);
+}
+
+pub fn Decl(comptime name: []const u8) fn (comptime type) type {
+    return struct {
+        fn Inner(comptime T: []const u8) type {
+            if (!@hasDecl(T, name))
+                @compileError(@typeName(T) ++ " has no declaration named " ++ name);
+
+            return T;
+        }
+    }.Inner;
 }
 
 pub fn decl(comptime T: type, comptime name: []const u8) type {
@@ -97,15 +103,19 @@ pub fn has_decl(
     return T;
 }
 
-pub fn is_struct(comptime T: type) bool {
-    return @typeInfo(T) == .@"struct";
+/// Checks and return T if its of type given by tag
+pub fn Is(comptime tag: std.meta.Tag(std.builtin.Type), comptime T: type) type {
+    if (!is(tag, T))
+        @compileError(@typeName(T) ++ "is not " ++ @tagName(tag));
+
+    return T;
 }
 
-pub fn is_array(comptime T: type) bool {
-    return @typeInfo(T) == .array;
+/// Returns true if T is of type given by tag
+pub fn is(comptime tag: std.meta.Tag(std.builtin.Type), comptime T: type) bool {
+    return tag == @typeInfo(T);
 }
 
-/// Assumes T is an array
 pub fn array_len(comptime T: type) comptime_int {
-    return @typeInfo(T).array.len;
+    return @typeInfo(Is(.array, T)).array.len;
 }

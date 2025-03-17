@@ -5,14 +5,14 @@ const mem = @import("mem.zig");
 
 const meta = @import("meta.zig");
 
+const Is = meta.Is;
+
 const Enum = meta.Enum;
 const Mode = mem.Mode;
 
 const Error = @import("error.zig").Error;
-const Union = meta.Union;
 
 const ForAll = meta.ForAll;
-const Struct = meta.Struct;
 
 const Container = meta.Container;
 
@@ -280,7 +280,7 @@ pub fn encoded_size(comptime T: type, value: EncSize(T)) u32 {
 
 pub fn encoded_size_struct(
     comptime T: type,
-    value: *const ForAll(EncSize, Struct(T)),
+    value: *const ForAll(EncSize, Is(.@"struct", T)),
 ) u32 {
     var ret: u32 = 0;
 
@@ -294,7 +294,7 @@ pub fn encoded_size_struct(
 pub fn serialize_struct(
     comptime T: type,
     writer: std.io.AnyWriter,
-    value: *const ForAll(Ser, Struct(T)),
+    value: *const ForAll(Ser, Is(.@"struct", T)),
 ) !void {
     inline for (comptime std.meta.fields(T)) |f| {
         try serialize_any(f.type, writer, @field(value, f.name));
@@ -304,7 +304,7 @@ pub fn serialize_struct(
 pub fn serialize_union(
     comptime T: type,
     writer: std.io.AnyWriter,
-    value: *const ForAll(Ser, Union(EncSize(T))),
+    value: *const ForAll(Ser, Is(.@"union", (EncSize(T)))),
 ) !void {
     const encoded_size_msg = value.encoded_size();
 

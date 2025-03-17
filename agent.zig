@@ -16,15 +16,17 @@ const sig = @import("sig.zig");
 
 const meta = @import("meta.zig");
 
-const EncSize = enc.EncSize;
+const Is = meta.Is;
+
 const Dec = enc.Dec;
 
 const Cont = enc.Cont;
 
 const Error = @import("error.zig").Error;
-const Union = meta.Union;
 
 const ForAll = meta.ForAll;
+
+const EncSize = enc.EncSize;
 
 fn static_encode(comptime T: type, comptime value: EncSize(T)) [value.encoded_size()]u8 {
     var arr = comptime std.BoundedArray(u8, value.encoded_size()).init(0) catch |err|
@@ -184,7 +186,7 @@ pub fn MakeIdentitiesAnswer(comptime Pk: type) type {
 
 pub fn SignResponse(comptime Sig: type) type {
     return struct {
-        signature: Union(Sig),
+        signature: Is(.@"union", Sig),
 
         const Self = @This();
 
@@ -301,7 +303,7 @@ pub fn MakeClient(
 /// TODO: data
 pub fn SignRequest(comptime Pk: type) type {
     return struct {
-        key: Union(Pk),
+        key: Is(.@"union", Pk),
         data: []const u8,
         flags: u32,
 
@@ -318,7 +320,7 @@ pub fn SignRequest(comptime Pk: type) type {
 
 pub fn Identity(comptime Key: type) type {
     return struct {
-        key: Union(Key),
+        key: Is(.@"union", Key),
         comment: []const u8,
 
         const Self = @This();
@@ -335,7 +337,7 @@ pub fn AddIdentity(comptime Sk: type) type {
 
 pub fn RemoveIdentity(comptime Pk: type) type {
     return struct {
-        key: Union(Pk),
+        key: Is(.@"union", Pk),
 
         const Self = @This();
 
@@ -393,7 +395,7 @@ pub fn MakeConstraint(comptime Extension: type) type {
         lifetime: Lifetime = 1,
         confirm: Confirm = 2,
         max_signatures: MaxSignatures = 3,
-        extension: Union(Extension) = 255,
+        extension: Is(.@"union", Extension) = 255,
 
         const Self = @This();
 
@@ -451,7 +453,7 @@ pub fn MakeConstraints(comptime Extension: type) type {
 
 pub fn AddIdConstrained(comptime Sk: type, comptime Constraints: type) type {
     return struct {
-        key: Union(Sk),
+        key: Is(.@"union", Sk),
         comment: []const u8,
         constraints: Constraints,
 
@@ -468,7 +470,7 @@ pub fn AddSmartCardKeyConstrained(
     comptime Constraints: type,
 ) type {
     return struct {
-        key: Union(Sk),
+        key: Is(.@"union", Sk),
         pin: []const u8,
         constraint: Constraints,
 

@@ -5,23 +5,22 @@ const mem = @import("mem.zig");
 
 const meta = @import("meta.zig");
 
+const Is = meta.Is;
+
 const Cont = enc.Cont;
-const Enum = meta.Enum;
 
 const Error = @import("error.zig").Error;
 
 pub fn enum_to_str(
     comptime T: type,
     comptime E: type,
-) [std.meta.fields(Enum(T)).len]E {
-    if (@typeInfo(T) != .@"enum") @compileError("Expected enum");
-
+) [std.meta.fields(Is(.@"enum", T)).len]E {
     const fields = comptime std.meta.fields(T);
 
     comptime var ret: [fields.len]E = undefined;
 
     inline for (comptime fields, &ret) |field, *r| {
-        r.* = if (comptime meta.is_array(E))
+        r.* = if (comptime meta.is(.array, E))
             field.name[0..meta.array_len(E)].*
         else
             field.name;
@@ -69,7 +68,7 @@ pub fn MakeMagic(
 
             return .{ next, .{
                 .value = try from_slice(
-                    if (comptime meta.is_array(E)) &magic else magic,
+                    if (comptime meta.is(.array, E)) &magic else magic,
                 ),
             } };
         }
@@ -77,7 +76,7 @@ pub fn MakeMagic(
         pub fn from_slice(src: []const u8) Error!Value {
             // `stringToEnum` is slower that doing this dance
             for (STRINGS, 0..) |s, i| {
-                const ref = if (comptime meta.is_array(E)) &s else s;
+                const ref = if (comptime meta.is(.array, E)) &s else s;
 
                 if (std.mem.eql(u8, ref, src)) {
                     return @enumFromInt(i);

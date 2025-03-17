@@ -69,8 +69,6 @@ pub const CertType = enum(u2) {
 
     const Self = @This();
 
-    const Box = mem.Unmanaged(u8);
-
     pub fn parse(src: []const u8) Error!enc.Cont(CertType) {
         const next, const val = try enc.rfc4251.parse_int(u32, src);
 

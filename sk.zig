@@ -8,6 +8,8 @@ const meta = @import("meta.zig");
 const pem = @import("pem.zig");
 const pk = @import("pk.zig");
 
+const Is = meta.Is;
+
 const Box = mem.Box;
 
 const From = enc.From;
@@ -386,7 +388,7 @@ pub fn MakeKeyBlob(comptime T: type) type {
 
     const fields =
         std.meta.fields(B) ++
-        std.meta.fields(Struct(T)) ++
+        std.meta.fields(Is(.@"struct", T)) ++
         std.meta.fields(A);
 
     const ret: std.builtin.Type.Struct = .{
