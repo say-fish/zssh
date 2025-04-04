@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const openssh = @import("zssh").openssh;
+const openssh = @import("openssh");
 
 const DebugAllocator = std.heap.DebugAllocator(.{});
 

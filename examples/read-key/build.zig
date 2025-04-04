@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.root_module.addImport("zssh", pkg.module("zssh"));
+    exe.root_module.addImport("openssh", pkg.module("openssh"));
 
     if (b.args) |args| {
         run_cmd.addArgs(args);

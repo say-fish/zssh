@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 const std = @import("std");
 
-const zssh = @import("zssh");
+const openssh = @import("openssh");
 
-const Ecdsa = zssh.openssh.public.Ecdsa;
-const Ed25519 = zssh.openssh.public.Ed25519;
-const Pem = zssh.openssh.public.Key.Pem;
-const Rsa = zssh.openssh.public.Rsa;
-const Key = zssh.openssh.public.Key;
+const Ecdsa = openssh.public.Ecdsa;
+const Ed25519 = openssh.public.Ed25519;
+const Key = openssh.public.Key;
+const Pem = openssh.public.Key.Pem;
+const Rsa = openssh.public.Rsa;
 
 const expect_equal = std.testing.expectEqual;
 const expect_equal_slices = std.testing.expectEqualSlices;

@@ -3,12 +3,12 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const perf = @import("perf.zig");
-const zssh = @import("zssh");
+const openssh = @import("openssh");
 
-const Pem = zssh.openssh.signature.SshSig.Pem;
+const Pem = openssh.signature.SshSig.Pem;
 
 const Sha512 = std.crypto.hash.sha2.Sha512;
-const SshSig = zssh.openssh.signature.SshSig;
+const SshSig = openssh.signature.SshSig;
 
 const PublicKey = std.crypto.sign.Ed25519.PublicKey;
 const Signature = std.crypto.sign.Ed25519.Signature;

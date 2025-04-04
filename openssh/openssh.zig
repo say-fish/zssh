@@ -1,20 +1,22 @@
 const std = @import("std");
 
-const enc = @import("enc.zig");
-const mem = @import("mem.zig");
+const zssh = @import("zssh");
+
+const enc = zssh.enc;
+const mem = zssh.mem;
 
 pub const Box = mem.Box;
 
 pub const Cont = enc.Cont;
 
-pub const Error = @import("error.zig").Error;
+pub const Error = zssh.err.Error;
 
 pub const BoxRef = mem.BoxRef;
 
 pub const cert = struct {
-    const gen = @import("cert.zig");
-    const pk = @import("pk.zig");
-    const sig = @import("sig.zig");
+    const gen = zssh.cert;
+    const pk = zssh.pk;
+    const sig = zssh.sig;
 
     pub const Magic = gen.MakeMagic(enum {
         @"ssh-rsa-cert-v01@openssh.com",
@@ -156,7 +158,7 @@ pub const cert = struct {
 };
 
 pub const public = struct {
-    const gen = @import("pk.zig");
+    const gen = zssh.pk;
 
     pub const Rsa = struct {
         magic: Magic,
@@ -407,7 +409,7 @@ pub const public = struct {
 };
 
 pub const signature = struct {
-    const gen = @import("sig.zig");
+    const gen = zssh.sig;
 
     /// The resulting signature is encoded as follows:
     ///
@@ -583,7 +585,7 @@ pub const signature = struct {
         pub const Pem = gen.MakePem(
             "BEGIN SSH SIGNATURE",
             "END SSH SIGNATURE",
-            @import("pem.zig").base64.Decoder,
+            zssh.pem.base64.Decoder,
         );
         pub const Preamble = gen.MakePreamble(enum { SSHSIG });
         pub const HashAlgorithm = gen.MakeMagic(enum { sha256, sha512 });
@@ -666,7 +668,7 @@ pub const signature = struct {
 };
 
 pub const private = struct {
-    const gen = @import("sk.zig");
+    const gen = zssh.sk;
 
     pub const wire = struct {
         pub const Rsa = struct {
@@ -893,7 +895,7 @@ pub const private = struct {
         gen.MakePem(
             "BEGIN OPENSSH PRIVATE KEY",
             "END OPENSSH PRIVATE KEY",
-            @import("pem.zig").base64.Decoder,
+            zssh.pem.base64.Decoder,
         ),
         public.Key,
         KeyBlob,
@@ -901,7 +903,7 @@ pub const private = struct {
 };
 
 pub const agent = struct {
-    const gen = @import("agent.zig");
+    const gen = zssh.agent;
 
     pub const Client = gen.MakeClient(
         public.Key,
@@ -1042,3 +1044,7 @@ pub const agent = struct {
         };
     };
 };
+
+test {
+    @import("std").testing.refAllDeclsRecursive(@This());
+}

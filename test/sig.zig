@@ -2,11 +2,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const zssh = @import("zssh");
-const sig = zssh.openssh.sinature;
+const openssh = @import("openssh");
+const sig = openssh.sinature;
 
-const SshSig = zssh.openssh.signature.SshSig;
-const Pem = zssh.openssh.signature.SshSig.Pem;
+const SshSig = openssh.signature.SshSig;
+const Pem = openssh.signature.SshSig.Pem;
 
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;

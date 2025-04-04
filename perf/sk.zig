@@ -3,10 +3,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const perf = @import("perf.zig");
-const zssh = @import("zssh");
+const openssh = @import("openssh");
 
-const Key = zssh.openssh.private.Key;
-const Pem = zssh.openssh.private.Key.Pem;
+const Key = openssh.private.Key;
+const Pem = openssh.private.Key.Pem;
 
 const DebugAllocator = std.heap.DebugAllocator(.{});
 

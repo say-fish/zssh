@@ -182,12 +182,26 @@ pub fn build(b: *std.Build) void {
         .root_source_file = .{
             .src_path = .{
                 .owner = b,
-                .sub_path = b.pathFromRoot("zssh.zig"),
+                .sub_path = b.pathFromRoot("src/zssh.zig"),
             },
         },
         .target = target,
         .optimize = optimize,
     });
+
+    const openssh = b.addModule("openssh", .{
+        .root_source_file = .{
+            .src_path = .{
+                .owner = b,
+                .sub_path = b.pathFromRoot("openssh/openssh.zig"),
+            }
+        },
+        .target = target,
+        .optimize = optimize,
+    });
+
+    openssh.addImport("zssh", mod);
+
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     arena.deinit();
@@ -207,30 +221,30 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("test/agent.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "zssh",
+            .mod = openssh,
+            .mod_name = "openssh",
             .use_lld = lld,
             .use_llvm = llvm,
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
             .name = "mem",
-            .root_source_file = b.path("magic.zig"),
+            .root_source_file = b.path("src/magic.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "zssh",
+            .mod = openssh,
+            .mod_name = "openssh",
             .use_lld = lld,
             .use_llvm = llvm,
         }) catch @panic("OOM");
 
         add_test(b, test_step, .{
             .name = "mem",
-            .root_source_file = b.path("mem.zig"),
+            .root_source_file = b.path("src/mem.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "zssh",
+            .mod = openssh,
+            .mod_name = "openssh",
             .use_lld = lld,
             .use_llvm = llvm,
         }) catch @panic("OOM");
@@ -240,8 +254,8 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("test/cert.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "zssh",
+            .mod = openssh,
+            .mod_name = "openssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -252,8 +266,8 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("test/sig.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "zssh",
+            .mod = openssh,
+            .mod_name = "openssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -264,8 +278,8 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("test/pk.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "zssh",
+            .mod = openssh,
+            .mod_name = "openssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -276,8 +290,8 @@ pub fn build(b: *std.Build) void {
             .root_source_file = b.path("test/sk.zig"),
             .target = target,
             .optimize = optimize,
-            .mod = mod,
-            .mod_name = "zssh",
+            .mod = openssh,
+            .mod_name = "openssh",
             .use_lld = lld,
             .use_llvm = llvm,
             .assets = &assets,
@@ -285,7 +299,7 @@ pub fn build(b: *std.Build) void {
 
         add_test(b, test_step, .{
             .name = "enc",
-            .root_source_file = b.path("enc.zig"),
+            .root_source_file = b.path("src/enc.zig"),
             .target = target,
             .optimize = optimize,
             .use_lld = lld,
@@ -298,7 +312,7 @@ pub fn build(b: *std.Build) void {
     {
         const docs_obj = b.addObject(.{
             .name = "zssh",
-            .root_source_file = b.path("zssh.zig"),
+            .root_source_file = b.path("src/zssh.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -347,8 +361,8 @@ pub fn build(b: *std.Build) void {
 
                 add_perf(b, perf_step, .{
                     .assets = &assets,
-                    .mod = mod,
-                    .mod_name = "zssh",
+                    .mod = openssh,
+                    .mod_name = "openssh",
                     .opt = comptime std.meta.stringToEnum(PerfOpt, field.name).?,
                     .record = false,
                     .target = target,
@@ -360,8 +374,8 @@ pub fn build(b: *std.Build) void {
         } else {
             add_perf(b, perf_step, .{
                 .assets = &assets,
-                .mod = mod,
-                .mod_name = "zssh",
+                .mod = openssh,
+                .mod_name = "openssh",
                 .opt = opt,
                 .record = record,
                 .target = target,
@@ -374,20 +388,28 @@ pub fn build(b: *std.Build) void {
 
     const dummy = b.addTest(.{
         .name = "zssh",
-        .root_source_file = b.path("zssh.zig"),
+        .root_source_file = b.path("src/zssh.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     b.installArtifact(dummy);
 
-    const dummy_check = b.addTest(.{
-        .name = "zssh",
-        .root_source_file = b.path("zssh.zig"),
+    const dummy_openssh = b.addTest(.{
+        .name = "openssh",
+        .root_source_file = b.path("openssh/openssh.zig"),
         .target = target,
         .optimize = optimize,
     });
 
+    dummy_openssh.root_module.addImport("zssh", mod);
+
+    b.installArtifact(dummy_openssh);
+
     const check = b.step("check", "Check if it compiles");
-    check.dependOn(&dummy_check.step);
+    check.dependOn(&dummy.step);
+    check.dependOn(&dummy_openssh.step);
 }
+
+
+
