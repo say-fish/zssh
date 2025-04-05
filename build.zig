@@ -190,18 +190,15 @@ pub fn build(b: *std.Build) void {
     });
 
     const openssh = b.addModule("openssh", .{
-        .root_source_file = .{
-            .src_path = .{
-                .owner = b,
-                .sub_path = b.pathFromRoot("openssh/openssh.zig"),
-            }
-        },
+        .root_source_file = .{ .src_path = .{
+            .owner = b,
+            .sub_path = b.pathFromRoot("openssh/openssh.zig"),
+        } },
         .target = target,
         .optimize = optimize,
     });
 
     openssh.addImport("zssh", mod);
-
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     arena.deinit();
@@ -386,6 +383,15 @@ pub fn build(b: *std.Build) void {
         }
     }
 
+    const build_examples = b.step("examples", "Build examples");
+
+    inline for (EXAMPLES) |example| {
+        const build_example = b.addSystemCommand(&.{ "zig", "build" });
+        build_example.setCwd(b.path("examples/" ++ example));
+
+        build_examples.dependOn(&build_example.step);
+    }
+
     const dummy = b.addTest(.{
         .name = "zssh",
         .root_source_file = b.path("src/zssh.zig"),
@@ -411,5 +417,4 @@ pub fn build(b: *std.Build) void {
     check.dependOn(&dummy_openssh.step);
 }
 
-
-
+const EXAMPLES = [_][]const u8{"read-key"};
