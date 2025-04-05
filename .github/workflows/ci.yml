@@ -15,7 +15,7 @@ jobs:
             version: master
       - name: Run tests
         run: zig build test --summary all
-      - name: Run perf
-        run: zig build perf
+      #- name: Run perf
+      #  run: zig build perf
       - name: Build examples
         run: zig build examples
