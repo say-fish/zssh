@@ -202,18 +202,18 @@ test "wire encode Ed25519 private key" {
     defer encoded.deinit();
 }
 
-// test "fuzz" {
-//     const Context = struct {
-//         fn fuzz(_: @This(), input: []const u8) anyerror!void {
-//             const pem = Pem.parse(input) catch return;
-//             const key = Key.from_pem(std.testing.allocator, pem) catch return;
-//
-//             std.debug.print("input: {X}\n", .{input});
-//             std.debug.print("key: {any}\n", .{key});
-//
-//             @panic("fuzz passed!!!");
-//         }
-//     };
-//
-//     try std.testing.fuzz(Context{}, Context.fuzz, .{});
-// }
+test "fuzz" {
+    const Context = struct {
+        fn fuzz(_: @This(), input: []const u8) anyerror!void {
+            const pem = Pem.parse(input) catch return;
+            const key = Key.from_pem(std.testing.allocator, pem) catch return;
+
+            std.debug.print("input: {X}\n", .{input});
+            std.debug.print("key: {any}\n", .{key});
+
+            @panic("fuzz passed!!!");
+        }
+    };
+
+    try std.testing.fuzz(Context{}, Context.fuzz, .{});
+}
