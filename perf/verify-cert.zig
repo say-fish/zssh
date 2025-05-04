@@ -40,11 +40,11 @@ pub fn main() !void {
     for (0..MAX_RUNS) |_| {
         const cert = try Ed25519.from_bytes(der.data);
 
-        const signature = Signature.fromBytes(cert.signature.ed.sm[0..64].*);
-        const pk = try PublicKey.fromBytes(cert.signature_key.ed.pk[0..32].*);
+        const signature = Signature.fromBytes(cert.signature.inner.ed.sm[0..64].*);
+        const pk = try PublicKey.fromBytes(cert.signature_key.inner.ed.pk[0..32].*);
 
         std.mem.doNotOptimizeAway(
-            try signature.verify(der.data[0..cert.enconded_sig_size()], pk),
+            try signature.verify(der.data[0..cert.encoded_sig_size()], pk),
         );
     }
 

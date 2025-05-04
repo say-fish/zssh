@@ -12,6 +12,7 @@ const Rsa = openssh.cert.Rsa;
 
 const expect = std.testing.expect;
 const expect_equal = std.testing.expectEqual;
+const expect_equal_slices = std.testing.expectEqualSlices;
 const expect_equal_strings = std.testing.expectEqualStrings;
 const expect_error = std.testing.expectError;
 
@@ -105,7 +106,7 @@ test "encoded size" {
     );
     defer cert.deinit();
 
-    try expect_equal(352, cert.data.ed.enconded_sig_size());
+    try expect_equal(352, cert.data.ed.encoded_sig_size());
 }
 
 test "verify ed25519 cert" {
@@ -120,12 +121,12 @@ test "verify ed25519 cert" {
     switch (try Cert.from_bytes(der.data)) {
         .ed => |cert| {
             const signature = Signature.fromBytes(
-                cert.signature.ed.sm[0..64].*,
+                cert.signature.inner.ed.sm[0..64].*,
             );
             const pk = try PublicKey.fromBytes(
-                cert.signature_key.ed.pk[0..32].*,
+                cert.signature_key.inner.ed.pk[0..32].*,
             );
-            try signature.verify(der.data[0..cert.enconded_sig_size()], pk);
+            try signature.verify(der.data[0..cert.encoded_sig_size()], pk);
         },
         else => return error.wrong_certificate,
     }
@@ -265,6 +266,19 @@ test "parse ed25519 cert with wrong magic string" {
         Error.InvalidMagicString,
         Cert.from_pem(std.testing.allocator, &pem),
     );
+}
+
+test "encode RSA cert" {
+    var cert = try Cert.from_pem(
+        std.testing.allocator,
+        &try Pem.parse(@embedFile("rsa-cert.pub")),
+    );
+    defer cert.deinit();
+
+    const encoded = try cert.data.encode(std.testing.allocator);
+    defer encoded.deinit();
+
+    try expect_equal_slices(u8, cert.ref, encoded.data);
 }
 
 test "fuzz" {

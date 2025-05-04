@@ -9,20 +9,16 @@
 
 const std = @import("std");
 
-const pk = @import("pk.zig");
-
 const enc = @import("enc.zig");
-const mem = @import("mem.zig");
-const pem = @import("pem.zig");
-const sig = @import("sig.zig");
-
-const meta = @import("meta.zig");
-
 const magic = @import("magic.zig");
+const mem = @import("mem.zig");
+const meta = @import("meta.zig");
+const pem = @import("pem.zig");
+const pk = @import("pk.zig");
+const sig = @import("sig.zig");
 
 const And = meta.And;
 const Box = mem.Box;
-
 const Error = @import("error.zig").Error;
 
 pub fn MakeMagic(comptime T: type) type {
@@ -73,6 +69,13 @@ pub const CertType = enum(u2) {
         const next, const val = try enc.rfc4251.parse_int(u32, src);
 
         return .{ next, @enumFromInt(val) };
+    }
+
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        try enc.serialize_any(u32, writer, @intFromEnum(self.*));
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -146,6 +149,13 @@ pub const Critical = struct {
 
     pub fn parse(src: []const u8) Error!enc.Cont(Critical) {
         return try enc.parse_with_cont(Self, src);
+    }
+
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        try enc.serialize_any([]const u8, writer, self.ref);
     }
 
     pub fn encoded_size(self: *const Self) u32 {
@@ -244,6 +254,13 @@ pub const Extensions = struct {
         return try enc.parse_with_cont(Self, src);
     }
 
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        try enc.serialize_any([]const u8, writer, self.ref);
+    }
+
     pub fn encoded_size(self: *const Self) u32 {
         return enc.encoded_size([]const u8, self.ref);
     }
@@ -301,10 +318,19 @@ const Principals = struct {
         return .{ next, .{ .ref = ref } };
     }
 
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        try enc.serialize_any([]const u8, writer, self.ref);
+    }
+
     pub fn encoded_size(self: *const Self) u32 {
         return enc.encoded_size([]const u8, self.ref);
     }
 };
+
+const Packaged = enc.Packaged;
 
 /// Generic type for a SSH certificate.
 pub fn MakeCert(
@@ -327,8 +353,8 @@ pub fn MakeCert(
         critical_options: Critical,
         extensions: Extensions,
         reserved: []const u8,
-        signature_key: Pk,
-        signature: Sig,
+        signature_key: Packaged(Pk),
+        signature: Packaged(Sig),
 
         const Self = @This();
 
@@ -357,7 +383,7 @@ pub fn MakeCert(
             return try Self.from(src);
         }
 
-        pub fn enconded_sig_size(self: *const Self) u32 {
+        pub fn encoded_sig_size(self: *const Self) u32 {
             var ret: u32 = 0;
 
             inline for (std.meta.fields(Self)) |field| {
@@ -367,7 +393,25 @@ pub fn MakeCert(
                 }
             }
 
-            return ret + @sizeOf(u32);
+            return ret;
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(Self, self);
+        }
+
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) anyerror!Box([]u8, .plain) {
+            return enc.encode_value(Self, allocator, self, .plain);
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
         }
     };
 }

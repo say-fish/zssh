@@ -59,6 +59,13 @@ pub const cert = struct {
             return enc.encode_value(Self, allocator, self, .plain);
         }
 
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
         pub fn encoded_size(self: *const Self) u32 {
             return enc.encoded_size_struct(Self, self);
         }
@@ -85,6 +92,13 @@ pub const cert = struct {
             return enc.encode_value(Self, allocator, self, .plain);
         }
 
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
         pub fn encoded_size(self: *const Self) u32 {
             return enc.encoded_size_struct(Self, self);
         }
@@ -106,6 +120,13 @@ pub const cert = struct {
             allocator: std.mem.Allocator,
         ) anyerror!Box(Self, .plain) {
             return enc.encode_value(Self, allocator, self, .plain);
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
         }
 
         pub fn encoded_size(self: *const Self) u32 {
@@ -153,6 +174,21 @@ pub const cert = struct {
             const cer = try Self.from(pem.magic.value, der.data);
 
             return .{ .allocator = allocator, .data = cer, .ref = der.data };
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return switch (self.*) {
+                inline else => |value| enc.encoded_size(@TypeOf(value), value),
+            };
+        }
+
+        pub fn encode(
+            self: *const Self,
+            allocator: std.mem.Allocator,
+        ) anyerror!Box([]u8, .plain) {
+            return switch (self.*) {
+                inline else => |value| value.encode(allocator),
+            };
         }
     };
 };
@@ -335,6 +371,7 @@ pub const public = struct {
         });
 
         pub fn parse(src: []const u8) Error!Cont(Key) {
+            // FIXME: We don't need this.
             const next, const key = try enc.rfc4251.parse_string(src);
 
             return .{ next, Self.from_bytes(key) catch return Error.InvalidData };
@@ -370,6 +407,15 @@ pub const public = struct {
                 .allocator = allocator,
                 .data = try Self.from(pem_enc.magic.value, der.data),
                 .ref = der.data,
+            };
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            return switch (self.*) {
+                inline else => |value| value.serialize(writer),
             };
         }
 
@@ -442,6 +488,17 @@ pub const signature = struct {
 
             return .{ next, try Self.from(sig) };
         }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(Self, self);
+        }
     };
 
     /// Signatures are encoded as follows:
@@ -475,6 +532,17 @@ pub const signature = struct {
 
                 return .{ next, try Blob.from(blob) };
             }
+
+            pub fn serialize(
+                self: *const Blob,
+                writer: std.io.AnyWriter,
+            ) anyerror!void {
+                try enc.serialize_struct(Blob, writer, self);
+            }
+
+            pub fn encoded_size(self: *const Blob) u32 {
+                return enc.encoded_size_struct(Blob, self);
+            }
         },
 
         const Self = @This();
@@ -492,6 +560,17 @@ pub const signature = struct {
             const next, const sig = try enc.rfc4251.parse_string(src);
 
             return .{ next, try Self.from(sig) };
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(Self, self);
         }
     };
 
@@ -514,6 +593,17 @@ pub const signature = struct {
             const next, const sig = try enc.rfc4251.parse_string(src);
 
             return .{ next, try Self.from(sig) };
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(Self, self);
         }
     };
 
@@ -553,6 +643,21 @@ pub const signature = struct {
                 .@"ssh-ed25519" => return .{
                     .ed = try rfc8032.from(src),
                 },
+            };
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            return switch (self.*) {
+                inline else => |value| value.serialize(writer),
+            };
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return switch (self.*) {
+                inline else => |value| enc.encoded_size(@TypeOf(value), value),
             };
         }
     };

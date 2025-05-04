@@ -391,6 +391,40 @@ pub fn MakeIterator(comptime T: type) type {
     };
 }
 
+pub fn Packaged(comptime T: type) type {
+    return struct {
+        inner: T,
+
+        const Self = @This();
+
+        pub fn init(value: T) Self {
+            return .{ .inner = value };
+        }
+
+        pub fn parse(src: []const u8) Error!Cont(Self) {
+            const next, const inner = try rfc4251.parse_string(src);
+
+            const value = try T.from_bytes(inner);
+
+            return .{ next, .init(value) };
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            const size = self.inner.encoded_size();
+
+            try serialize_any(u32, writer, size);
+            try serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return self.inner.encoded_size() + @sizeOf(u32);
+        }
+    };
+}
+
 const expect_equal = std.testing.expectEqual;
 const expect_equal_strings = std.testing.expectEqualStrings;
 

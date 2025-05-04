@@ -106,7 +106,7 @@ pub fn has_decl(
 /// Checks and return T if its of type given by tag
 pub fn Is(comptime tag: std.meta.Tag(std.builtin.Type), comptime T: type) type {
     if (!is(tag, T))
-        @compileError(@typeName(T) ++ "is not " ++ @tagName(tag));
+        @compileError(@typeName(T) ++ " is not " ++ @tagName(tag));
 
     return T;
 }
