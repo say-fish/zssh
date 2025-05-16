@@ -8,25 +8,18 @@
 
 const std = @import("std");
 
+const enc = @import("enc.zig");
+const meta = @import("meta.zig");
 const pk = @import("pk.zig");
+const sig = @import("sig.zig");
 const sk = @import("sk.zig");
 
-const enc = @import("enc.zig");
-const sig = @import("sig.zig");
-
-const meta = @import("meta.zig");
-
-const Is = meta.Is;
-
-const Dec = enc.Dec;
-
 const Cont = enc.Cont;
-
-const Error = @import("error.zig").Error;
-
-const ForAll = meta.ForAll;
-
+const Dec = enc.Dec;
 const EncSize = enc.EncSize;
+const Error = @import("error.zig").Error;
+const ForAll = meta.ForAll;
+const Is = meta.Is;
 
 fn static_encode(comptime T: type, comptime value: EncSize(T)) [value.encoded_size()]u8 {
     var arr = comptime std.BoundedArray(u8, value.encoded_size()).init(0) catch |err|
@@ -120,8 +113,8 @@ pub fn MakeAgent(
         };
 
         pub fn init(
-            tag: std.meta.Tag(Self),
-            value: std.meta.TagPayload(Self, tag),
+            comptime tag: std.meta.Tag(Self),
+            value: @FieldType(Self, @tagName(tag)),
         ) Self {
             return @unionInit(Self, @tagName(tag), value);
         }
@@ -155,7 +148,8 @@ pub fn MakeIdentitiesAnswer(comptime Pk: type) type {
         pub const empty: Self = .{ .nkeys = 0, .keys = null };
         pub const empty_encoded: []const u8 = &static_encode(Self, .empty);
 
-        pub const Iterator = enc.MakeIterator(Identity(Pk));
+        pub const Identity = MakeIdentity(Pk);
+        pub const Iterator = enc.MakeIterator(MakeIdentity(Pk));
 
         pub fn iter(self: *const Self) ?Iterator {
             return if (self.keys) |keys| .{ .ref = keys } else null;
@@ -172,14 +166,24 @@ pub fn MakeIdentitiesAnswer(comptime Pk: type) type {
         }
 
         pub fn encoded_size(self: *const Self) u32 {
-            return enc.encoded_size_struct(Self, self);
+            return @sizeOf(u32) + if (self.keys) |keys| @as(u32, @intCast(keys.len)) else @sizeOf(u8);
         }
 
         pub fn serialize(
             self: *const Self,
             writer: std.io.AnyWriter,
         ) anyerror!void {
-            try enc.serialize_struct(Self, writer, self);
+            try enc.serialize_any(u32, writer, self.nkeys);
+
+            if (self.keys) |keys| {
+                _ = try writer.write(keys);
+            } else {
+                try enc.serialize_any(u8, writer, 0);
+            }
+        }
+
+        pub fn is_empty(self: *const Self) bool {
+            return self.nkeys == 0;
         }
     };
 }
@@ -225,7 +229,7 @@ pub fn MakeClient(
         /// using SignRequest
         ///
         /// Protocol number: SSH_AGENTC_SIGN_REQUEST = 13
-        sign_request: SignRequest(Pk) = 13,
+        sign_request: SignRequest = 13,
 
         /// Keys may be added to the agent using AddIdentiy.
         ///
@@ -281,13 +285,35 @@ pub fn MakeClient(
         /// Protocol number: SSH_AGENTC_EXTENSION = 27
         extension: Extension = 27,
 
+        const Self = @This();
+
+        pub const SignRequest = MakeSignRequest(Pk);
         pub const Constraints = MakeConstraints(ConstraintExt);
         pub const Extension = Ext;
         pub const Query = struct {
             pub fn parse(_: []const u8) Error!Cont(Query) {
                 return .{ 0, .{} };
             }
+
+            pub fn encoded_size(_: *const Query) u32 {
+                @panic("TODO");
+            }
         };
+
+        pub const request_identities_encoded =
+            static_encode(Self, .init(.request_identities, {}));
+        pub const remove_all_identities_encoded =
+            static_encode(
+                Self,
+                .init(.remove_all_identities, {}),
+            );
+
+        pub fn init(
+            comptime tag: std.meta.Tag(Self),
+            value: @FieldType(Self, @tagName(tag)),
+        ) Self {
+            return @unionInit(Self, @tagName(tag), value);
+        }
 
         pub fn from_bytes(src: []const u8) !@This() {
             return try msg_from_bytes(@This(), src);
@@ -297,11 +323,24 @@ pub fn MakeClient(
             _, const msg = try decode(@This(), src);
             return msg;
         }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            try enc.serialize_union(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return switch (self.*) {
+                inline else => |e| enc.encoded_size(@TypeOf(e), e),
+            } + @sizeOf(u32) + @sizeOf(u8); // FIXME: Get the tag size since the tag could be encoded as a string
+        }
     };
 }
 
 /// TODO: data
-pub fn SignRequest(comptime Pk: type) type {
+pub fn MakeSignRequest(comptime Pk: type) type {
     return struct {
         key: Is(.@"union", Pk),
         data: []const u8,
@@ -309,16 +348,40 @@ pub fn SignRequest(comptime Pk: type) type {
 
         const Self = @This();
 
-        pub const SSH_AGENT_RSA_SHA2_256: u32 = 2;
-        pub const SSH_AGENT_RSA_SHA2_512: u32 = 4;
+        pub const Flags = enum(u32) {
+            pub const SSH_AGENT_RSA_SHA2_256: u32 = 2;
+            pub const SSH_AGENT_RSA_SHA2_512: u32 = 4;
+
+            pub fn init(in: u32) !Flags {
+                if (in != 2 or in != 4) {
+                    return Error.InvalidRsaSignatureFlag;
+                }
+
+                return @enumFromInt(in);
+            }
+        };
 
         pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            _ = self;
+            _ = writer;
+            @panic("TODO");
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            _ = self;
+            @panic("TODO");
+        }
     };
 }
 
-pub fn Identity(comptime Key: type) type {
+pub fn MakeIdentity(comptime Key: type) type {
     return struct {
         key: Is(.@"union", Key),
         comment: []const u8,
@@ -328,11 +391,28 @@ pub fn Identity(comptime Key: type) type {
         pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            const key_len = self.key.encoded_size();
+
+            try enc.serialize_any(u32, writer, key_len);
+            try self.key.serialize(writer);
+            try enc.serialize_any([]const u8, writer, self.comment);
+
+            // try enc.serialize_struct(Self, writer, self);
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            return enc.encoded_size_struct(Self, self);
+        }
     };
 }
 
 pub fn AddIdentity(comptime Sk: type) type {
-    return Identity(Sk);
+    return MakeIdentity(Sk);
 }
 
 pub fn RemoveIdentity(comptime Pk: type) type {
@@ -343,6 +423,20 @@ pub fn RemoveIdentity(comptime Pk: type) type {
 
         pub fn parse(src: []const u8) Error!Cont(Self) {
             return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            _ = self;
+            _ = writer;
+            @panic("TODO");
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            _ = self;
+            @panic("TODO");
         }
     };
 }
@@ -357,6 +451,20 @@ pub const RemoveSmartcardKey = struct {
     pub fn parse(src: []const u8) Error!Cont(Self) {
         return try enc.parse_with_cont(Self, src);
     }
+
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        _ = self;
+        _ = writer;
+        @panic("TODO");
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        _ = self;
+        @panic("TODO");
+    }
 };
 
 pub const AddSmartCardKey = struct {
@@ -368,6 +476,20 @@ pub const AddSmartCardKey = struct {
     pub fn parse(src: []const u8) Error!Cont(Self) {
         return try enc.parse_with_cont(Self, src);
     }
+
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        _ = self;
+        _ = writer;
+        @panic("TODO");
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        _ = self;
+        @panic("TODO");
+    }
 };
 
 pub const Lock = struct {
@@ -378,6 +500,20 @@ pub const Lock = struct {
     pub fn parse(src: []const u8) Error!Cont(Self) {
         return try enc.parse_with_cont(Self, src);
     }
+
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        _ = self;
+        _ = writer;
+        @panic("TODO");
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        _ = self;
+        @panic("TODO");
+    }
 };
 
 pub const Unlock = struct {
@@ -387,6 +523,20 @@ pub const Unlock = struct {
 
     pub fn parse(src: []const u8) Error!Cont(Self) {
         return try enc.parse_with_cont(Self, src);
+    }
+
+    pub fn serialize(
+        self: *const Self,
+        writer: std.io.AnyWriter,
+    ) anyerror!void {
+        _ = self;
+        _ = writer;
+        @panic("TODO");
+    }
+
+    pub fn encoded_size(self: *const Self) u32 {
+        _ = self;
+        @panic("TODO");
     }
 };
 
@@ -462,6 +612,20 @@ pub fn AddIdConstrained(comptime Sk: type, comptime Constraints: type) type {
         pub fn parse(src: []const u8) Error!Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            _ = self;
+            _ = writer;
+            @panic("TODO");
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            _ = self;
+            @panic("TODO");
+        }
     };
 }
 
@@ -478,6 +642,20 @@ pub fn AddSmartCardKeyConstrained(
 
         pub fn parse(src: []const u8) Error!Cont(Self) {
             return try enc.parse_with_cont(Self, src);
+        }
+
+        pub fn serialize(
+            self: *const Self,
+            writer: std.io.AnyWriter,
+        ) anyerror!void {
+            _ = self;
+            _ = writer;
+            @panic("TODO");
+        }
+
+        pub fn encoded_size(self: *const Self) u32 {
+            _ = self;
+            @panic("TODO");
         }
     };
 }

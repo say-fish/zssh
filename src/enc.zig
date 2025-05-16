@@ -82,6 +82,7 @@ pub fn Ser(comptime T: type) type {
     switch (T) {
         void, // For unit structs
         bool,
+        u8,
         u32,
         u64,
         []u8,
@@ -212,7 +213,7 @@ pub fn serialize_any(
     switch (comptime T) {
         void => return,
 
-        u32, u64 => _ = try writer.writeInt(T, value, .big),
+        u8, u32, u64 => _ = try writer.writeInt(T, value, .big),
 
         []u8, []const u8 => {
             _ = try writer.writeInt(u32, @intCast(value.len), .big);

@@ -874,8 +874,6 @@ pub const private = struct {
 
             pub const Magic = public.Key.Magic;
 
-            // FIXME: Add encode
-
             pub fn parse(src: []const u8) Error!Cont(Self) {
                 const magic = Magic.from_bytes(src) catch
                     return error.InvalidData;
@@ -907,6 +905,17 @@ pub const private = struct {
                         return .{ next, .{ .ed = key } };
                     },
                 }
+            }
+
+            pub fn serialize(
+                _: *const Self,
+                _: std.io.AnyWriter,
+            ) anyerror!void {
+                @panic("TODO");
+            }
+
+            pub fn encoded_size(_: *const Self) u32 {
+                @panic("TODO");
             }
         };
     };
@@ -1041,6 +1050,10 @@ pub const agent = struct {
 
             pub fn parse(src: []const u8) Error!Cont(Self) {
                 return try enc.parse_with_cont(Self, src);
+            }
+
+            pub fn encoded_size(_: *const Self) u32 {
+                @panic("TODO");
             }
         };
 

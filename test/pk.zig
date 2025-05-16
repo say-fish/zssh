@@ -85,6 +85,23 @@ test "encode Ed25519" {
     try expect_equal_slices(u8, key.ref, encoded.data);
 }
 
+test "encode rsa" {
+    const key = try Key.from_pem(
+        std.testing.allocator,
+        try Pem.parse(@embedFile("rsa-key.pub")),
+    );
+    defer key.deinit();
+
+    const encode_size = key.data.encoded_size();
+
+    try expect_equal(407, encode_size);
+
+    const encoded = try key.data.encode(std.testing.allocator);
+    defer encoded.deinit();
+
+    try expect_equal_slices(u8, key.ref, encoded.data);
+}
+
 test "fuzz public key" {
     const Context = struct {
         fn fuzz(_: @This(), input: []const u8) anyerror!void {

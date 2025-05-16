@@ -11,6 +11,8 @@ pub const sk = @import("sk.zig");
 pub const err = @import("error.zig");
 pub const pem = @import("pem.zig");
 
+pub const Error = @import("error.zig").Error;
+
 // TODO: With openssh support
 // TODO: libzssh.a/.so
 

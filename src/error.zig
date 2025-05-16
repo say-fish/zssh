@@ -24,4 +24,5 @@ pub const Error = error{
     InvalidFileFormat,
     MsgLenMismatch,
     InvalidBase64Data,
+    InvalidRsaSignatureFlag,
 };
