@@ -349,11 +349,11 @@ pub fn MakeSignRequest(comptime Pk: type) type {
         const Self = @This();
 
         pub const Flags = enum(u32) {
-            pub const SSH_AGENT_RSA_SHA2_256: u32 = 2;
-            pub const SSH_AGENT_RSA_SHA2_512: u32 = 4;
+            SSH_AGENT_RSA_SHA2_256 = 2,
+            SSH_AGENT_RSA_SHA2_512 = 4,
 
             pub fn init(in: u32) !Flags {
-                if (in != 2 or in != 4) {
+                if (in != 2 and in != 4) {
                     return Error.InvalidRsaSignatureFlag;
                 }
 
