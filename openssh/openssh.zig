@@ -483,6 +483,13 @@ pub const signature = struct {
             return try enc.parse(Self, src);
         }
 
+        pub fn init(
+            comptime tag: Magic.Value,
+            value: []const u8,
+        ) Self {
+            return .{ .magic = .{ .value = tag }, .blob = value };
+        }
+
         pub fn parse(src: []const u8) Error!Cont(Self) {
             const next, const sig = try enc.rfc4251.parse_string(src);
 
@@ -621,6 +628,10 @@ pub const signature = struct {
             @"ecdsa-sha2-nistp512",
             @"ssh-ed25519",
         });
+
+        pub fn init(comptime tag: std.meta.Tag(Self), value: std.meta.TagPayload(Self, tag)) Self {
+            return @unionInit(Self, @tagName(tag), value);
+        }
 
         pub fn parse(src: []const u8) Error!Cont(Signature) {
             const next, const key = try enc.rfc4251.parse_string(src);

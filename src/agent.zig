@@ -194,6 +194,13 @@ pub fn SignResponse(comptime Sig: type) type {
 
         const Self = @This();
 
+        pub fn init(
+            comptime tag: std.meta.Tag(Sig),
+            value: std.meta.TagPayload(Sig, tag),
+        ) Self {
+            return .{ .signature = @unionInit(Sig, @tagName(tag), value) };
+        }
+
         pub fn parse(src: []const u8) Error!enc.Cont(Self) {
             return try enc.parse_with_cont(Self, src);
         }
