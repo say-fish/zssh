@@ -15,9 +15,23 @@ jobs:
             version: master
       - name: Run tests
         run: zig build test --summary all
-      - name: Run tests with self-hosted backend
-        run: zig build test --summary all -Dnollvm
       #- name: Run perf
       #  run: zig build perf
       - name: Build examples
         run: zig build examples
+
+  test-with-self-hosted-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+            version: master
+      - name: Run tests with self-hosted backend
+        run: zig build test --summary all -Dnollvm
+      - name: Build examples
+        run: zig build examples
+
+
