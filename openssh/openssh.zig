@@ -474,7 +474,7 @@ pub const signature = struct {
 
         const Self = @This();
 
-        const Magic = gen.MakeMagic(enum(u1) {
+        const Magic = gen.MakeMagic(enum {
             @"rsa-sha2-256",
             @"rsa-sha2-512",
         });
@@ -590,7 +590,7 @@ pub const signature = struct {
 
         const Self = @This();
 
-        pub const Magic = gen.MakeMagic(enum(u1) { @"ssh-ed25519" });
+        pub const Magic = gen.MakeMagic(enum { @"ssh-ed25519" });
 
         fn from(src: []const u8) Error!Self {
             return try enc.parse(Self, src);

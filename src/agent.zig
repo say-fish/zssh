@@ -205,16 +205,19 @@ pub fn SignResponse(comptime Sig: type) type {
             return try enc.parse_with_cont(Self, src);
         }
 
-        pub fn encoded_size(_: *const Self) u32 {
-            @panic("TODO");
+        pub fn encoded_size(self: *const Self) u32 {
+            return self.signature.encoded_size() + @sizeOf(u32); // XXX: Cleanup
         }
 
         pub fn serialize(
-            _: *const Self,
-            _: std.io.AnyWriter,
+            self: *const Self,
+            writer: std.io.AnyWriter,
         ) anyerror!void {
-            @panic("TODO");
-            //try enc.serialize_struct(Self, writer, self);
+            const enc_size = self.signature.encoded_size(); 
+
+            try enc.serialize_any(u32, writer, enc_size);
+
+            try self.signature.serialize(writer);
         }
     };
 }
