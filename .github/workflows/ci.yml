@@ -15,8 +15,6 @@ jobs:
             version: master
       - name: Run tests
         run: zig build test --summary all
-      #- name: Run perf
-      #  run: zig build perf
       - name: Build examples
         run: zig build examples
 
@@ -34,4 +32,15 @@ jobs:
       - name: Build examples
         run: zig build examples
 
+  perf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+      - name: Install Zig
+        uses: mlugg/setup-zig@v2
+        with:
+            version: master
+      - name: Perf
+        run: zig build perf -Dnoperf
 
