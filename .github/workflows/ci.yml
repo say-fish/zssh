@@ -15,6 +15,8 @@ jobs:
             version: master
       - name: Run tests
         run: zig build test --summary all
+      - name: Run tests with self-hosted backend
+        run: zig build test --summary all -Dnollvm
       #- name: Run perf
       #  run: zig build perf
       - name: Build examples
